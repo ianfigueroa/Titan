@@ -6,6 +6,7 @@
 #include <boost/beast/websocket/stream.hpp>
 #include <atomic>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <nlohmann/json.hpp>
@@ -97,7 +98,8 @@ private:
     boost::beast::flat_buffer buffer_;
 
     std::mutex write_mutex_;
-    std::vector<std::string> write_queue_;
+    std::deque<std::string> write_queue_;
+    std::string current_message_;
     bool writing_{false};
 };
 
