@@ -73,12 +73,12 @@ TEST(SpscQueueTest, SizeApproximate) {
 
     EXPECT_EQ(queue.size_approx(), 0u);
 
-    queue.try_push(1);
-    queue.try_push(2);
-    queue.try_push(3);
+    EXPECT_TRUE(queue.try_push(1));
+    EXPECT_TRUE(queue.try_push(2));
+    EXPECT_TRUE(queue.try_push(3));
     EXPECT_EQ(queue.size_approx(), 3u);
 
-    queue.try_pop();
+    (void)queue.try_pop();
     EXPECT_EQ(queue.size_approx(), 2u);
 }
 
@@ -87,10 +87,10 @@ TEST(SpscQueueTest, IsEmpty) {
 
     EXPECT_TRUE(queue.is_empty());
 
-    queue.try_push(1);
+    EXPECT_TRUE(queue.try_push(1));
     EXPECT_FALSE(queue.is_empty());
 
-    queue.try_pop();
+    (void)queue.try_pop();
     EXPECT_TRUE(queue.is_empty());
 }
 
@@ -164,8 +164,8 @@ TEST(SpscQueueTest, ThreadSafetySingleProducerSingleConsumer) {
     EXPECT_EQ(sum_produced.load(), sum_consumed.load());
 
     // Sum of 1 to N = N*(N+1)/2
-    int expected = kNumItems * (kNumItems + 1) / 2;
-    EXPECT_EQ(sum_consumed.load(), expected);
+    auto expected = static_cast<long long>(kNumItems) * (kNumItems + 1) / 2;
+    EXPECT_EQ(sum_consumed.load(), static_cast<int>(expected));
 }
 
 TEST(SpscQueueTest, WrapAround) {

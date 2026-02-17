@@ -24,7 +24,7 @@ TEST(VwapCalculatorTest, MultipleTrades) {
     VwapCalculator calc(100);
 
     // Trade 1: 1.0 @ 42150
-    calc.add_trade(42150.0, 1.0);
+    (void)calc.add_trade(42150.0, 1.0);
 
     // Trade 2: 2.0 @ 42160
     double vwap = calc.add_trade(42160.0, 2.0);
@@ -39,9 +39,9 @@ TEST(VwapCalculatorTest, WindowSlidingRemovesOldTrades) {
     VwapCalculator calc(3);  // Small window for testing
 
     // Fill the window
-    calc.add_trade(100.0, 1.0);  // Index 0
-    calc.add_trade(200.0, 1.0);  // Index 1
-    calc.add_trade(300.0, 1.0);  // Index 2
+    (void)calc.add_trade(100.0, 1.0);  // Index 0
+    (void)calc.add_trade(200.0, 1.0);  // Index 1
+    (void)calc.add_trade(300.0, 1.0);  // Index 2
 
     // VWAP = (100 + 200 + 300) / 3 = 200
     EXPECT_DOUBLE_EQ(calc.vwap(), 200.0);
@@ -59,9 +59,9 @@ TEST(VwapCalculatorTest, WindowSlidingRemovesOldTrades) {
 TEST(VwapCalculatorTest, RollingAverageSize) {
     VwapCalculator calc(100);
 
-    calc.add_trade(100.0, 1.0);
-    calc.add_trade(100.0, 2.0);
-    calc.add_trade(100.0, 3.0);
+    (void)calc.add_trade(100.0, 1.0);
+    (void)calc.add_trade(100.0, 2.0);
+    (void)calc.add_trade(100.0, 3.0);
 
     // Average size = (1 + 2 + 3) / 3 = 2
     EXPECT_DOUBLE_EQ(calc.rolling_avg_size(), 2.0);
@@ -71,9 +71,9 @@ TEST(VwapCalculatorTest, RollingStdDev) {
     VwapCalculator calc(100);
 
     // Add trades with sizes: 1, 2, 3
-    calc.add_trade(100.0, 1.0);
-    calc.add_trade(100.0, 2.0);
-    calc.add_trade(100.0, 3.0);
+    (void)calc.add_trade(100.0, 1.0);
+    (void)calc.add_trade(100.0, 2.0);
+    (void)calc.add_trade(100.0, 3.0);
 
     // Mean = 2, variance = ((1-2)^2 + (2-2)^2 + (3-2)^2) / 3 = (1 + 0 + 1) / 3 = 0.667
     // Std dev = sqrt(0.667) ≈ 0.816
@@ -222,7 +222,7 @@ TEST(TradeFlowTest, BuySellVolumeTracking) {
         .is_buyer_maker = true
     };
 
-    flow.process_trade(buy_trade);
+    (void)flow.process_trade(buy_trade);
     auto metrics = flow.process_trade(sell_trade);
 
     EXPECT_DOUBLE_EQ(metrics.total_buy_volume, 1.0);
@@ -251,7 +251,7 @@ TEST(TradeFlowTest, LargeTradeAlert) {
             .trade_time = static_cast<uint64_t>(1699500000000 + i),
             .is_buyer_maker = false
         };
-        flow.process_trade(small_trade);
+        (void)flow.process_trade(small_trade);
     }
 
     // Add a very large trade
