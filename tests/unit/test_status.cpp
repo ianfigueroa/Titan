@@ -22,12 +22,12 @@ TEST(StatusTest, ErrCreation) {
 
 TEST(StatusTest, ValueThrowsOnError) {
     auto result = Result<int, std::string>::Err("error");
-    EXPECT_THROW(result.value(), std::runtime_error);
+    EXPECT_THROW((void)result.value(), std::runtime_error);
 }
 
 TEST(StatusTest, ErrorThrowsOnOk) {
     auto result = Result<int, std::string>::Ok(42);
-    EXPECT_THROW(result.error(), std::runtime_error);
+    EXPECT_THROW((void)result.error(), std::runtime_error);
 }
 
 TEST(StatusTest, MapTransformsValue) {

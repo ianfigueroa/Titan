@@ -61,7 +61,7 @@ TEST_F(OrderBookTest, ApplyUpdate) {
         {{42150.0, 1.5}, {42149.0, 2.0}},
         {{42151.0, 1.0}, {42152.0, 1.5}}
     );
-    book.apply_snapshot(snapshot);
+    (void)book.apply_snapshot(snapshot);
 
     // Then apply an update
     auto update = make_update(1001, 1002, 1000,
@@ -82,7 +82,7 @@ TEST_F(OrderBookTest, RemoveLevelOnZeroQuantity) {
         {{42150.0, 1.5}, {42149.0, 2.0}},
         {{42151.0, 1.0}, {42152.0, 1.5}}
     );
-    book.apply_snapshot(snapshot);
+    (void)book.apply_snapshot(snapshot);
 
     // Remove best bid by setting quantity to 0
     auto update = make_update(1001, 1002, 1000,
@@ -102,7 +102,7 @@ TEST_F(OrderBookTest, AddNewPriceLevel) {
         {{42150.0, 1.5}},
         {{42152.0, 1.0}}
     );
-    book.apply_snapshot(snapshot);
+    (void)book.apply_snapshot(snapshot);
 
     // Add a new best ask
     auto update = make_update(1001, 1002, 1000,
@@ -158,7 +158,7 @@ TEST_F(OrderBookTest, NegativeImbalance) {
 }
 
 TEST_F(OrderBookTest, SequenceGapDetection) {
-    book.apply_snapshot(make_snapshot(1000, {}, {}));
+    (void)book.apply_snapshot(make_snapshot(1000, {}, {}));
 
     // Valid sequence: prev = 1000
     EXPECT_FALSE(book.has_sequence_gap(1001, 1000));
@@ -175,7 +175,7 @@ TEST_F(OrderBookTest, ClearResetsState) {
         {{42150.0, 1.5}},
         {{42151.0, 1.0}}
     );
-    book.apply_snapshot(snapshot);
+    (void)book.apply_snapshot(snapshot);
     EXPECT_EQ(book.last_update_id(), 1000u);
 
     book.clear();
@@ -228,7 +228,7 @@ TEST_F(OrderBookTest, CachedBestIteratorsPerformance) {
         asks.emplace_back(42151.0 + i, 1.0);
     }
 
-    book.apply_snapshot(make_snapshot(1000, bids, asks));
+    (void)book.apply_snapshot(make_snapshot(1000, bids, asks));
 
     // Multiple snapshots should all be O(1) for best bid/ask access
     for (int i = 0; i < 1000; ++i) {
