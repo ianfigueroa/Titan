@@ -14,11 +14,20 @@ function(set_project_warnings target)
         -Woverloaded-virtual
         -Wconversion
         -Wsign-conversion
-        -Wnull-dereference
         -Wdouble-promotion
         -Wformat=2
         -Wimplicit-fallthrough
     )
+
+    # GCC-specific: disable false positives from Boost/spdlog/fmt headers
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        list(APPEND GCC_CLANG_WARNINGS
+            # Disable null-dereference as it triggers false positives in Boost headers
+            -Wno-null-dereference
+            # Disable dangling-reference as it triggers false positives in spdlog/fmt
+            -Wno-dangling-reference
+        )
+    endif()
 
     set(MSVC_WARNINGS
         /W4
