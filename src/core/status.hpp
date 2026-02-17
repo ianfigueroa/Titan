@@ -24,13 +24,15 @@ public:
     }
 
     /// Check if result is successful
+    /// Uses index-based check to handle T==E case
     [[nodiscard]] bool is_ok() const noexcept {
-        return std::holds_alternative<T>(data_);
+        return data_.index() == 0;
     }
 
     /// Check if result is an error
+    /// Uses index-based check to handle T==E case
     [[nodiscard]] bool is_err() const noexcept {
-        return std::holds_alternative<E>(data_);
+        return data_.index() == 1;
     }
 
     /// Get the value (throws if error)
@@ -38,7 +40,7 @@ public:
         if (is_err()) {
             throw std::runtime_error("Called value() on error Result");
         }
-        return std::get<T>(data_);
+        return std::get<0>(data_);
     }
 
     /// Get the value (throws if error) - rvalue version
@@ -46,7 +48,7 @@ public:
         if (is_err()) {
             throw std::runtime_error("Called value() on error Result");
         }
-        return std::get<T>(std::move(data_));
+        return std::get<0>(std::move(data_));
     }
 
     /// Get the error (throws if ok)
@@ -54,13 +56,13 @@ public:
         if (is_ok()) {
             throw std::runtime_error("Called error() on ok Result");
         }
-        return std::get<E>(data_);
+        return std::get<1>(data_);
     }
 
     /// Get value or default
     [[nodiscard]] T value_or(T default_value) const& {
         if (is_ok()) {
-            return std::get<T>(data_);
+            return std::get<0>(data_);
         }
         return default_value;
     }
@@ -70,7 +72,7 @@ public:
         if (is_err()) {
             throw std::runtime_error("Called take_value() on error Result");
         }
-        return std::get<T>(std::move(data_));
+        return std::get<0>(std::move(data_));
     }
 
     /// Transform the value if Ok, preserve error if Err
@@ -78,9 +80,9 @@ public:
     [[nodiscard]] auto map(F&& func) const& -> Result<std::invoke_result_t<F, const T&>, E> {
         using U = std::invoke_result_t<F, const T&>;
         if (is_ok()) {
-            return Result<U, E>::Ok(func(std::get<T>(data_)));
+            return Result<U, E>::Ok(func(std::get<0>(data_)));
         }
-        return Result<U, E>::Err(std::get<E>(data_));
+        return Result<U, E>::Err(std::get<1>(data_));
     }
 
     /// Transform the error if Err, preserve value if Ok
@@ -88,9 +90,9 @@ public:
     [[nodiscard]] auto map_error(F&& func) const& -> Result<T, std::invoke_result_t<F, const E&>> {
         using NewE = std::invoke_result_t<F, const E&>;
         if (is_err()) {
-            return Result<T, NewE>::Err(func(std::get<E>(data_)));
+            return Result<T, NewE>::Err(func(std::get<1>(data_)));
         }
-        return Result<T, NewE>::Ok(std::get<T>(data_));
+        return Result<T, NewE>::Ok(std::get<0>(data_));
     }
 
     /// Chain operations that may fail
@@ -98,9 +100,9 @@ public:
     [[nodiscard]] auto and_then(F&& func) const& -> std::invoke_result_t<F, const T&> {
         using ResultType = std::invoke_result_t<F, const T&>;
         if (is_ok()) {
-            return func(std::get<T>(data_));
+            return func(std::get<0>(data_));
         }
-        return ResultType::Err(std::get<E>(data_));
+        return ResultType::Err(std::get<1>(data_));
     }
 
 private:
