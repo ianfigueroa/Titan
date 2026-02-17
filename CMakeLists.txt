@@ -75,6 +75,11 @@ target_link_libraries(titan_lib PUBLIC
     spdlog::spdlog
 )
 
+# Windows-specific socket libraries
+if(WIN32)
+    target_link_libraries(titan_lib PUBLIC ws2_32 mswsock)
+endif()
+
 set_project_warnings(titan_lib)
 
 if(TITAN_ENABLE_SANITIZERS)
