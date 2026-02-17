@@ -1,7 +1,19 @@
 #include "network/websocket_client.hpp"
 #include <boost/beast/core/buffers_to_string.hpp>
 #include <boost/beast/websocket/rfc6455.hpp>
+#include <openssl/ssl.h>
 #include <spdlog/spdlog.h>
+
+// Helper to set SNI hostname without old-style cast warning
+namespace {
+inline bool set_sni_hostname(SSL* ssl, const char* hostname) {
+    // SSL_set_tlsext_host_name is a macro with old-style cast
+    // Use SSL_ctrl directly to avoid warning
+    return SSL_ctrl(ssl, SSL_CTRL_SET_TLSEXT_HOSTNAME,
+                    TLSEXT_NAMETYPE_host_name,
+                    const_cast<char*>(hostname)) != 0;
+}
+}  // namespace
 
 namespace titan::network {
 
@@ -56,11 +68,13 @@ void WebSocketClient::on_resolve(boost::system::error_code ec, tcp::resolver::re
 
     spdlog::debug("Resolved {} endpoints", results.size());
 
-    // Create a new WebSocket stream
-    ws_ = std::make_unique<ws_stream>(ioc_, *ssl_ctx_);
+    // Create a new WebSocket stream with tcp_stream wrapper
+    ws_ = std::make_unique<ws_stream>(
+        ssl_stream(tcp_stream(boost::asio::make_strand(ioc_)), *ssl_ctx_)
+    );
 
-    // Set SNI hostname for SSL
-    if (!SSL_set_tlsext_host_name(ws_->next_layer().native_handle(), host_.c_str())) {
+    // Set SNI hostname for SSL (using helper to avoid old-style cast)
+    if (!set_sni_hostname(ws_->next_layer().native_handle(), host_.c_str())) {
         boost::system::error_code ssl_ec{
             static_cast<int>(::ERR_get_error()),
             boost::asio::error::get_ssl_category()
