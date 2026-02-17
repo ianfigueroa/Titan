@@ -18,15 +18,7 @@ void signal_handler(int signal) {
 }
 
 void print_banner() {
-    std::cout << R"(
-  _____ _ _
- |_   _(_) |_ __ _ _ __     ___ _ __  _ __
-   | | | | __/ _` | '_ \   / __| '_ \| '_ \
-   | | | | || (_| | | | | | (__| |_) | |_) |
-   |_| |_|\__\__,_|_| |_|  \___| .__/| .__/
-                               |_|   |_|
-    Real-time Market Data Infrastructure
-)" << std::endl;
+    std::cout << "\n  titan.cpp - real-time market data\n" << std::endl;
 }
 
 }  // namespace
