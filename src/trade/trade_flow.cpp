@@ -8,8 +8,8 @@ TradeFlow::TradeFlow(const Config::Engine& config)
 {}
 
 TradeFlowMetrics TradeFlow::process_trade(const binance::AggTrade& trade) {
-    // Update VWAP
-    vwap_.add_trade(trade.price, trade.quantity);
+    // Update VWAP (nodiscard return value intentionally ignored)
+    (void)vwap_.add_trade(trade.price, trade.quantity);
 
     // Track buy/sell volume
     // is_buyer_maker = true means the taker (aggressor) was a seller

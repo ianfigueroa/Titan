@@ -106,8 +106,8 @@ void MarketDataEngine::network_thread_func() {
     feed_handler_->stop();
     feed_handler_.reset();
 
-    // Signal engine thread to stop
-    queue_.try_push(Shutdown{});
+    // Signal engine thread to stop (ignore if queue full at shutdown)
+    (void)queue_.try_push(Shutdown{});
 
     spdlog::debug("Network thread stopped");
 }
@@ -176,7 +176,7 @@ void MarketDataEngine::handle_depth_update(const DepthUpdateMsg& msg) {
         return;
     }
 
-    order_book_.apply_update(update);
+    (void)order_book_.apply_update(update);
     last_processed_id_ = update.final_update_id;
 }
 
@@ -196,7 +196,7 @@ void MarketDataEngine::handle_agg_trade(const AggTradeMsg& msg) {
 void MarketDataEngine::handle_snapshot(const SnapshotMsg& msg) {
     spdlog::info("Applying snapshot, lastUpdateId={}", msg.data.last_update_id);
 
-    order_book_.apply_snapshot(msg.data);
+    (void)order_book_.apply_snapshot(msg.data);
     last_processed_id_ = msg.data.last_update_id;
     sync_state_ = SyncState::Synced;
 
