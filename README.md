@@ -87,6 +87,8 @@ make
 
 Output:
 ```
+  titan.cpp - real-time market data
+
 [2024-01-15 10:30:45.123] [info] Starting titan market data engine
 [2024-01-15 10:30:45.124] [info] Symbol: btcusdt
 [2024-01-15 10:30:45.500] [info] WebSocket connected

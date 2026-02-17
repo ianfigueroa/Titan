@@ -63,8 +63,15 @@ std::string JsonFormatter::iso_timestamp() {
         now.time_since_epoch()
     ) % 1000;
 
+    struct tm tm_buf{};
+#ifdef _WIN32
+    gmtime_s(&tm_buf, &time_t_now);
+#else
+    gmtime_r(&time_t_now, &tm_buf);
+#endif
+
     std::ostringstream oss;
-    oss << std::put_time(std::gmtime(&time_t_now), "%Y-%m-%dT%H:%M:%S");
+    oss << std::put_time(&tm_buf, "%Y-%m-%dT%H:%M:%S");
     oss << '.' << std::setfill('0') << std::setw(3) << ms.count() << 'Z';
     return oss.str();
 }

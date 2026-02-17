@@ -204,20 +204,19 @@ void WebSocketSession::send(const std::string& message) {
 }
 
 void WebSocketSession::do_write() {
-    std::string msg;
     {
         std::lock_guard<std::mutex> lock(write_mutex_);
         if (write_queue_.empty()) {
             writing_ = false;
             return;
         }
-        msg = std::move(write_queue_.front());
-        write_queue_.erase(write_queue_.begin());
+        current_message_ = std::move(write_queue_.front());
+        write_queue_.pop_front();
     }
 
     ws_.text(true);
     ws_.async_write(
-        boost::asio::buffer(msg),
+        boost::asio::buffer(current_message_),
         [self = shared_from_this()](auto ec, auto bytes) {
             self->on_write(ec, bytes);
         }
