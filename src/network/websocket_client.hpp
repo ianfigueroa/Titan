@@ -6,6 +6,8 @@
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
+#include <boost/beast/core/tcp_stream.hpp>
+#include <boost/beast/ssl.hpp>
 #include <boost/beast/websocket/stream.hpp>
 #include <atomic>
 #include <functional>
@@ -19,7 +21,8 @@ namespace titan::network {
 class WebSocketClient : public std::enable_shared_from_this<WebSocketClient> {
 public:
     using tcp = boost::asio::ip::tcp;
-    using ssl_stream = boost::asio::ssl::stream<tcp::socket>;
+    using tcp_stream = boost::beast::tcp_stream;
+    using ssl_stream = boost::asio::ssl::stream<tcp_stream>;
     using ws_stream = boost::beast::websocket::stream<ssl_stream>;
 
     /// Callback types
