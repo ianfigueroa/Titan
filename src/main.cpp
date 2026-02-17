@@ -18,7 +18,7 @@ void signal_handler(int signal) {
 }
 
 void print_banner() {
-    std::cout << "\n  titan.cpp - real-time market data\n" << std::endl;
+    std::cout << "\ntitan\n" << std::endl;
 }
 
 }  // namespace
