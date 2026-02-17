@@ -3,7 +3,19 @@
 #include <boost/beast/http/read.hpp>
 #include <boost/beast/http/write.hpp>
 #include <boost/beast/version.hpp>
+#include <openssl/ssl.h>
 #include <spdlog/spdlog.h>
+
+// Helper to set SNI hostname without old-style cast warning
+namespace {
+inline bool set_sni_hostname(SSL* ssl, const char* hostname) {
+    // SSL_set_tlsext_host_name is a macro with old-style cast
+    // Use SSL_ctrl directly to avoid warning
+    return SSL_ctrl(ssl, SSL_CTRL_SET_TLSEXT_HOSTNAME,
+                    TLSEXT_NAMETYPE_host_name,
+                    const_cast<char*>(hostname)) != 0;
+}
+}  // namespace
 
 namespace titan::network {
 
@@ -57,8 +69,8 @@ void RestClient::on_resolve(boost::system::error_code ec, tcp::resolver::results
     // Create a new SSL stream
     stream_ = std::make_unique<ssl_stream>(ioc_, *ssl_ctx_);
 
-    // Set SNI hostname
-    if (!SSL_set_tlsext_host_name(stream_->native_handle(), host_.c_str())) {
+    // Set SNI hostname (using helper to avoid old-style cast)
+    if (!set_sni_hostname(stream_->native_handle(), host_.c_str())) {
         boost::system::error_code ssl_ec{
             static_cast<int>(::ERR_get_error()),
             boost::asio::error::get_ssl_category()
