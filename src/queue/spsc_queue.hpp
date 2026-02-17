@@ -43,7 +43,32 @@ public:
     SpscQueue(SpscQueue&&) = delete;
     SpscQueue& operator=(SpscQueue&&) = delete;
 
-    /// Try to push an element to the queue
+    /// Try to push an element to the queue (lvalue version, makes a copy)
+    /// @return true if successful, false if queue is full
+    [[nodiscard]] bool try_push(const T& value) noexcept(std::is_nothrow_copy_constructible_v<T>)
+        requires std::is_copy_constructible_v<T>
+    {
+        const std::size_t pos = tail_.load(std::memory_order_relaxed);
+        Slot& slot = slots_[pos & kMask];
+
+        const std::size_t seq = slot.sequence.load(std::memory_order_acquire);
+
+        if (seq != pos) {
+            // Queue is full
+            return false;
+        }
+
+        // Construct the element in place (copy)
+        new (&slot.storage) T(value);
+
+        // Publish the element
+        slot.sequence.store(pos + 1, std::memory_order_release);
+        tail_.store(pos + 1, std::memory_order_relaxed);
+
+        return true;
+    }
+
+    /// Try to push an element to the queue (rvalue version, moves)
     /// @return true if successful, false if queue is full
     [[nodiscard]] bool try_push(T&& value) noexcept(std::is_nothrow_move_constructible_v<T>) {
         const std::size_t pos = tail_.load(std::memory_order_relaxed);
