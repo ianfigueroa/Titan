@@ -7,8 +7,9 @@
 
 namespace titan::binance {
 
-/// Price level: (price, quantity)
-using PriceLevel = std::pair<Price, Quantity>;
+/// Price level: (fixed-point price, double quantity)
+/// Uses FixedPrice for exact map key matching, double for quantities
+using PriceLevel = std::pair<FixedPrice, Quantity>;
 
 /// Depth update from @depth stream
 struct DepthUpdate {
