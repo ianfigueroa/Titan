@@ -226,10 +226,74 @@ current_delay *= multiplier
 3. **Cache Line Padding**: SPSC queue head/tail on separate cache lines
 4. **Async Logging**: spdlog never blocks engine thread
 
+## Queue Overflow Behavior
+
+The SPSC queue has a fixed capacity (default: 65536 messages). When the queue fills:
+
+1. **Producer blocks**: Network thread waits for space, potentially dropping incoming messages
+2. **Binance reconnects**: If too many messages are dropped, sequence gaps trigger resync
+3. **Auto-recovery**: System requests fresh snapshot and rebuilds book state
+
+**Monitoring queue health:**
+- Watch for "Requesting snapshot" messages in logs
+- High frequency indicates engine thread can't keep up
+- Solutions: reduce output frequency, optimize consumer, or increase queue size
+
+**Tuning:**
+```cpp
+// In src/queue/spsc_queue.hpp
+static constexpr size_t kDefaultCapacity = 65536;  // ~1MB for typical messages
+```
+
+## Deployment Recommendations
+
+### Single Instance
+
+For most use cases, a single Titan instance is sufficient:
+
+```bash
+docker run -d --restart=unless-stopped \
+  -p 9001:9001 \
+  --name titan \
+  ghcr.io/ianfigueroa/titan:latest
+```
+
+### Multiple Symbols
+
+Run separate instances for different symbols:
+
+```yaml
+services:
+  titan-btc:
+    image: ghcr.io/ianfigueroa/titan:latest
+    ports: ["9001:9001"]
+    environment: [TITAN_SYMBOL=btcusdt]
+
+  titan-eth:
+    image: ghcr.io/ianfigueroa/titan:latest
+    ports: ["9002:9001"]
+    environment: [TITAN_SYMBOL=ethusdt]
+```
+
+### Production Checklist
+
+- [ ] Use release builds (not debug)
+- [ ] Set appropriate resource limits in Docker
+- [ ] Monitor container health and restart policy
+- [ ] Log aggregation for debugging
+- [ ] Network proximity to Binance servers (AWS Tokyo/Singapore)
+
+### Resource Requirements
+
+| Metric | Typical | High Activity |
+|--------|---------|---------------|
+| CPU | < 5% | 10-15% |
+| Memory | ~50 MB | ~100 MB |
+| Network | ~10 KB/s | ~50 KB/s |
+
 ## Future Enhancements
 
-- [ ] Feed recording/replay (`src/recording/`)
-- [ ] Multiple symbol support
-- [ ] Configuration file loading
+- [ ] Multiple symbol support (single instance)
 - [ ] Prometheus metrics endpoint
+- [ ] Feed recording/replay
 - [ ] Consider `boost::flat_map` for high-frequency updates

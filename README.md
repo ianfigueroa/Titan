@@ -4,183 +4,134 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/ianfigueroa/Titan)](https://github.com/ianfigueroa/Titan/releases)
 
-Real-time market data infrastructure for cryptocurrency trading. Connects to Binance Futures WebSocket, maintains a local order book, and streams processed data.
+High-performance market data engine for cryptocurrency trading applications. Connects to Binance Futures, processes order book and trade data, and streams analytics via WebSocket.
 
-## Try It Now (No Build Required)
+## What It Does
 
-1. Download the latest binary from [Releases](https://github.com/ianfigueroa/Titan/releases)
-2. Run: `./titan`
-3. Open `examples/web/index.html` in your browser to see live data
+Titan runs as a standalone service that your application connects to via WebSocket:
 
-## Features
-
-- **Live Order Book**: Real-time depth updates with sequence gap detection
-- **Trade Flow Analysis**: VWAP, volume tracking, large trade alerts
-- **WebSocket Server**: Stream processed data to clients on `ws://localhost:9001`
-- **Robust Reconnection**: Exponential backoff with jitter
-- **Lock-free Architecture**: SPSC queue for zero-copy thread communication
-- **Fixed-Point Arithmetic**: Precise price calculations without floating-point errors
-
-## Quick Start
-
-```bash
-# Build
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-
-# Run with default settings (BTCUSDT)
-./titan
-
-# Run with config file
-./titan -c ../config.example.json
-
-# Run with different symbol
-./titan -s ethusdt
+```
+Your App (Python/Node/Go/etc)
+       │
+       │ ws://localhost:9001
+       ▼
+┌─────────────────────────────────┐
+│           Titan.cpp             │
+├─────────────────────────────────┤
+│  • Real-time order book         │
+│  • VWAP calculation             │
+│  • Whale trade detection        │
+│  • Spread & imbalance metrics   │
+└─────────────────────────────────┘
+       │
+       │ WebSocket
+       ▼
+   Binance Futures API
 ```
 
-## Requirements
+**Why use Titan instead of connecting directly to Binance?**
+- Pre-calculated analytics (VWAP, imbalance, spread in bps)
+- Whale trade alerts using sigma-based detection
+- Order book with gap detection and automatic resync
+- Fixed-point arithmetic for precise calculations
+- One Binance connection shared by multiple clients
 
-- C++20 compiler (GCC 11+, Clang 13+, MSVC 2022+)
-- CMake 3.20+
-- Boost 1.80+ (system component)
-- OpenSSL
+## Installation
 
-## Build Instructions
-
-### Linux (Ubuntu/Debian)
+### Option 1: Docker (Recommended)
 
 ```bash
-# Install dependencies
-sudo apt update
+docker pull ghcr.io/ianfigueroa/titan:latest
+docker run -p 9001:9001 ghcr.io/ianfigueroa/titan
+```
+
+### Option 2: Download Binary
+
+Download from [Releases](https://github.com/ianfigueroa/Titan/releases):
+```bash
+# Linux
+wget https://github.com/ianfigueroa/Titan/releases/latest/download/titan-linux-x64
+chmod +x titan-linux-x64
+./titan-linux-x64
+
+# macOS
+wget https://github.com/ianfigueroa/Titan/releases/latest/download/titan-macos-x64
+chmod +x titan-macos-x64
+./titan-macos-x64
+```
+
+### Option 3: Build from Source
+
+```bash
+# Ubuntu/Debian
 sudo apt install -y build-essential cmake libboost-all-dev libssl-dev
-
-# Clone and build
-git clone https://github.com/ianfigueroa/Titan.git titan.cpp
-cd titan.cpp
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-
-# Run
+git clone https://github.com/ianfigueroa/Titan.git
+cd Titan && mkdir build && cd build
+cmake .. && make -j$(nproc)
 ./titan
 ```
 
-### macOS
+## Connect Your Application
 
-```bash
-# Install dependencies
-brew install cmake boost openssl
+Once Titan is running, connect via WebSocket at `ws://localhost:9001`.
 
-# Clone and build
-git clone https://github.com/ianfigueroa/Titan.git titan.cpp
-cd titan.cpp
-mkdir build && cd build
-cmake .. -DOPENSSL_ROOT_DIR=$(brew --prefix openssl)
-make -j$(sysctl -n hw.ncpu)
+### Python
 
-# Run
-./titan
+```python
+import asyncio
+import json
+import websockets
+
+async def main():
+    async with websockets.connect("ws://localhost:9001") as ws:
+        async for message in ws:
+            data = json.loads(message)
+            if data["type"] == "metrics":
+                print(f"VWAP: {data['trade']['vwap']:.2f}")
+            elif data["type"] == "alert":
+                print(f"WHALE {data['side']}: {data['quantity']} @ {data['price']}")
+
+asyncio.run(main())
 ```
 
-### Windows (MSYS2)
+### JavaScript/Node.js
 
-```bash
-# Install dependencies in MSYS2 MinGW64 shell
-pacman -S mingw-w64-x86_64-cmake mingw-w64-x86_64-boost mingw-w64-x86_64-openssl mingw-w64-x86_64-gcc
+```javascript
+const WebSocket = require('ws');
+const ws = new WebSocket('ws://localhost:9001');
 
-# Clone and build
-git clone https://github.com/ianfigueroa/Titan.git titan.cpp
-cd titan.cpp
-mkdir build && cd build
-cmake .. -G "MinGW Makefiles"
-mingw32-make -j$(nproc)
-
-# Run
-./titan.exe
+ws.on('message', (data) => {
+  const msg = JSON.parse(data);
+  if (msg.type === 'metrics') {
+    console.log(`VWAP: ${msg.trade.vwap.toFixed(2)}`);
+  } else if (msg.type === 'alert') {
+    console.log(`WHALE ${msg.side}: ${msg.quantity} @ ${msg.price}`);
+  }
+});
 ```
 
-### Build Options
+### Web Browser
 
-```bash
-# Release build (default)
-cmake .. -DCMAKE_BUILD_TYPE=Release
-
-# Debug build
-cmake .. -DCMAKE_BUILD_TYPE=Debug
-
-# With sanitizers (memory error detection)
-cmake .. -DTITAN_ENABLE_SANITIZERS=ON
-
-# Without tests
-cmake .. -DTITAN_BUILD_TESTS=OFF
+```javascript
+const ws = new WebSocket('ws://localhost:9001');
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  // Update your UI
+};
 ```
 
-## Usage
+See the `examples/` folder for complete working examples in Python, Node.js, and a web dashboard.
 
-### Command Line Options
+## WebSocket API
 
-```
-./titan [OPTIONS]
+Titan streams two types of messages:
 
-Options:
-  -c, --config FILE    Load configuration from JSON file
-  -s, --symbol SYMBOL  Trading symbol (e.g., btcusdt, ethusdt)
-  -h, --help           Show help message
-  -v, --version        Show version
-```
+### Metrics (every 500ms)
 
-### Examples
-
-```bash
-# Default: BTCUSDT with default settings
-./titan
-
-# Use a config file
-./titan -c config.json
-
-# Override symbol
-./titan -s ethusdt
-
-# Both: config file with symbol override
-./titan -c config.json -s solusdt
-```
-
-### Sample Output
-
-```
-titan
-
-[2026-02-17 20:38:22.443] [info] Starting titan market data engine
-[2026-02-17 20:38:22.443] [info] Symbol: btcusdt
-[2026-02-17 20:38:22.500] [info] WebSocket connected
-[2026-02-17 20:38:22.800] [info] Sync: Synchronized
-[2026-02-17 20:38:23.000] [info] BID: 67542.20 (3.24) | ASK: 67542.30 (1.93) | SPREAD: 0.0bps | IMB: +17% | VWAP: 67542.30 | TRADES: 5
-[2026-02-17 20:38:42.188] [warning] ALERT: LARGE BUY 0.318 BTC @ 67559.30 (2.3 sigma)
-```
-
-**Output Fields:**
-- `BID/ASK`: Best bid/ask price with quantity in parentheses
-- `SPREAD`: Bid-ask spread in basis points
-- `IMB`: Order book imbalance (+100% = all bids, -100% = all asks)
-- `VWAP`: Volume-weighted average price
-- `TRADES`: Trade count in the window
-
-### WebSocket Server
-
-Connect to `ws://localhost:9001` to receive JSON data:
-
-```bash
-# Using wscat
-npm install -g wscat
-wscat -c ws://localhost:9001
-```
-
-JSON messages:
 ```json
 {
   "type": "metrics",
-  "timestamp": "2026-02-17T20:38:23.000Z",
+  "timestamp": "2025-02-18T20:38:23.000Z",
   "book": {
     "bestBid": 67542.20,
     "bestAsk": 67542.30,
@@ -196,11 +147,23 @@ JSON messages:
 }
 ```
 
-Alert messages:
+| Field | Description |
+|-------|-------------|
+| `book.bestBid` | Best bid price |
+| `book.bestAsk` | Best ask price |
+| `book.spreadBps` | Spread in basis points |
+| `book.imbalance` | Order book imbalance (-1 to +1, positive = bid heavy) |
+| `trade.vwap` | Volume-weighted average price |
+| `trade.buyVolume` | Total buy volume in window |
+| `trade.sellVolume` | Total sell volume in window |
+| `trade.tradeCount` | Number of trades in window |
+
+### Alerts (on whale trades)
+
 ```json
 {
   "type": "alert",
-  "timestamp": "2026-02-17T20:38:42.188Z",
+  "timestamp": "2025-02-18T20:38:42.188Z",
   "side": "BUY",
   "price": 67559.30,
   "quantity": 0.318,
@@ -208,27 +171,35 @@ Alert messages:
 }
 ```
 
-### Graceful Shutdown
-
-Press `Ctrl+C` to shut down gracefully:
-```
-^C
-Shutdown requested...
-[info] Engine shutdown complete
-Goodbye!
-```
+Alerts trigger when a trade size exceeds the configured sigma threshold (default: 2.0 standard deviations above mean).
 
 ## Configuration
 
-Configuration priority (highest to lowest):
-1. Command line arguments (`-s`)
-2. Environment variables (`TITAN_*`)
-3. Config file (`-c`)
-4. Default values
+### Command Line
 
-### Config File (JSON)
+```bash
+./titan                          # Default: BTCUSDT
+./titan -s ethusdt               # Different symbol
+./titan -c config.json           # Use config file
+./titan -c config.json -s solusdt # Config + override symbol
+```
 
-See `config.example.json` for a full example:
+### Environment Variables
+
+```bash
+TITAN_SYMBOL=ethusdt ./titan
+TITAN_WS_SERVER_PORT=9002 ./titan
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TITAN_SYMBOL` | `btcusdt` | Trading pair |
+| `TITAN_WS_SERVER_PORT` | `9001` | WebSocket server port |
+| `TITAN_VWAP_WINDOW` | `100` | Trades in VWAP calculation |
+| `TITAN_LARGE_TRADE_STD_DEVS` | `2.0` | Sigma threshold for alerts |
+| `TITAN_CONSOLE_INTERVAL_MS` | `500` | Console output interval |
+
+### Config File
 
 ```json
 {
@@ -250,68 +221,33 @@ See `config.example.json` for a full example:
 }
 ```
 
-### Environment Variables
+## Docker Compose
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `TITAN_SYMBOL` | Trading pair | `btcusdt` |
-| `TITAN_WS_HOST` | WebSocket host | `fstream.binance.com` |
-| `TITAN_REST_HOST` | REST API host | `fapi.binance.com` |
-| `TITAN_CONSOLE_INTERVAL_MS` | Output interval (ms) | `500` |
-| `TITAN_WS_SERVER_PORT` | WebSocket server port | `9001` |
-| `TITAN_VWAP_WINDOW` | VWAP trade window | `100` |
-| `TITAN_LARGE_TRADE_STD_DEVS` | Alert threshold | `2.0` |
+Run Titan alongside your application:
 
-Example:
-```bash
-TITAN_SYMBOL=ethusdt TITAN_WS_SERVER_PORT=9002 ./titan
+```yaml
+services:
+  titan:
+    image: ghcr.io/ianfigueroa/titan:latest
+    ports:
+      - "9001:9001"
+    environment:
+      - TITAN_SYMBOL=btcusdt
+
+  your-app:
+    build: .
+    depends_on:
+      - titan
+    environment:
+      - TITAN_URL=ws://titan:9001
 ```
 
-### Configuration Reference
+## Use Cases
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `network.symbol` | `btcusdt` | Trading pair (lowercase) |
-| `network.ws_host` | `fstream.binance.com` | Binance Futures WebSocket |
-| `network.rest_host` | `fapi.binance.com` | Binance Futures REST API |
-| `engine.vwap_window` | `100` | Number of trades in VWAP |
-| `engine.large_trade_std_devs` | `2.0` | Sigma threshold for alerts |
-| `engine.depth_limit` | `1000` | Max order book levels |
-| `output.console_interval_ms` | `500` | Console output rate |
-| `output.ws_server_port` | `9001` | WebSocket server port |
-| `output.imbalance_levels` | `10` | Levels for imbalance calc |
-
-## Docker
-
-Build and run with Docker:
-
-```bash
-# Build the image
-docker build -t titan .
-
-# Run with default config
-docker run -p 9001:9001 titan
-
-# Run with custom config
-docker run -p 9001:9001 -v $(pwd)/config.json:/etc/titan/config.json:ro titan
-
-# Using docker-compose
-docker-compose up -d
-```
-
-Connect to the WebSocket server at `ws://localhost:9001`.
-
-## Testing
-
-```bash
-cd build
-
-# Run all tests
-ctest --output-on-failure
-
-# Or run directly
-./titan_tests
-```
+- **Trading terminals**: Real-time order book display, whale alerts
+- **Algorithmic trading**: VWAP signals, imbalance detection
+- **Analytics dashboards**: Market microstructure visualization
+- **Alert systems**: Whale trade notifications
 
 ## Architecture
 
@@ -342,9 +278,103 @@ ctest --output-on-failure
            │   Console   │           │  WS Server  │
            │   Output    │           │  (9001)     │
            └─────────────┘           └─────────────┘
+                                            │
+                                            ▼
+                                     Your Application
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed design documentation.
+## Building
+
+### Requirements
+
+- C++20 compiler (GCC 11+, Clang 13+, MSVC 2022+)
+- CMake 3.20+
+- Boost 1.74+
+- OpenSSL
+
+### Linux
+
+```bash
+sudo apt install -y build-essential cmake libboost-all-dev libssl-dev
+git clone https://github.com/ianfigueroa/Titan.git
+cd Titan && mkdir build && cd build
+cmake .. && make -j$(nproc)
+```
+
+### macOS
+
+```bash
+brew install cmake boost openssl
+git clone https://github.com/ianfigueroa/Titan.git
+cd Titan && mkdir build && cd build
+cmake .. -DOPENSSL_ROOT_DIR=$(brew --prefix openssl)
+make -j$(sysctl -n hw.ncpu)
+```
+
+### Windows (MSYS2)
+
+```bash
+pacman -S mingw-w64-x86_64-cmake mingw-w64-x86_64-boost mingw-w64-x86_64-openssl mingw-w64-x86_64-gcc
+git clone https://github.com/ianfigueroa/Titan.git
+cd Titan && mkdir build && cd build
+cmake .. -G "MinGW Makefiles"
+mingw32-make -j$(nproc)
+```
+
+### Running Tests
+
+```bash
+cd build
+./titan_tests
+```
+
+## Troubleshooting
+
+### Connection Issues
+
+**Titan can't connect to Binance**
+- Check your internet connection and firewall settings
+- Binance may be blocked in your region; try using a VPN
+- Verify the symbol exists on Binance Futures (e.g., `btcusdt`, not `btc-usdt`)
+
+**WebSocket clients can't connect to Titan**
+- Ensure Titan is running and listening on the expected port (default: 9001)
+- Check for port conflicts: `netstat -an | grep 9001`
+- When using Docker, ensure port mapping is correct: `-p 9001:9001`
+
+### Sync Issues
+
+**"Requesting snapshot" appears repeatedly**
+- This indicates sequence gaps in the depth stream
+- Normal during high volatility or network issues
+- If persistent, check your network latency to Binance
+
+**Order book shows stale data**
+- Verify the depth stream is connected (check console output)
+- Titan auto-recovers from disconnections; wait for resync
+
+### Performance
+
+**High CPU usage**
+- Normal during high market activity
+- Reduce `depth_limit` in config if you don't need full book depth
+- Ensure you're running a release build, not debug
+
+**High memory usage**
+- Memory grows with number of connected WebSocket clients
+- Each client buffers pending messages during slow sends
+- Disconnect idle clients or increase queue limits
+
+### Docker Issues
+
+**Image won't start**
+- Check logs: `docker logs <container_id>`
+- Ensure port 9001 is not in use
+- Verify image pulled correctly: `docker images | grep titan`
+
+**Can't pull from ghcr.io**
+- Check your Docker login: `docker login ghcr.io`
+- The image is public, but some networks block ghcr.io
 
 ## License
 

@@ -3,6 +3,7 @@ FROM ubuntu:22.04 AS builder
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
+    git \
     libboost-all-dev \
     libssl-dev \
     nlohmann-json3-dev \
@@ -36,4 +37,5 @@ EXPOSE 9001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD nc -z localhost 9001 || exit 1
 
-CMD ["titan", "-c", "/etc/titan/config.json"]
+ENTRYPOINT ["titan"]
+CMD ["-c", "/etc/titan/config.json"]
