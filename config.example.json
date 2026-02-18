@@ -1,0 +1,24 @@
+{
+  "network": {
+    "ws_host": "fstream.binance.com",
+    "ws_port": "443",
+    "rest_host": "fapi.binance.com",
+    "rest_port": "443",
+    "symbol": "btcusdt",
+    "reconnect_delay_initial_ms": 1000,
+    "reconnect_delay_max_ms": 30000,
+    "reconnect_backoff_multiplier": 2.0,
+    "reconnect_jitter_factor": 0.3
+  },
+  "engine": {
+    "queue_capacity": 65536,
+    "vwap_window": 100,
+    "large_trade_std_devs": 2.0,
+    "depth_limit": 1000
+  },
+  "output": {
+    "console_interval_ms": 500,
+    "ws_server_port": 9001,
+    "imbalance_levels": 5
+  }
+}

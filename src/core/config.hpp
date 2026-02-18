@@ -1,7 +1,9 @@
 #pragma once
 
+#include "core/status.hpp"
 #include <chrono>
 #include <cstdint>
+#include <optional>
 #include <string>
 
 namespace titan {
@@ -46,6 +48,18 @@ struct Config {
     [[nodiscard]] static Config defaults() {
         return Config{};
     }
+
+    /// Load configuration from JSON file
+    /// Falls back to defaults for any missing fields
+    /// @param path Path to the JSON configuration file
+    /// @return Config on success, error message on failure
+    [[nodiscard]] static Result<Config, std::string> load_from_file(const std::string& path);
+
+    /// Load configuration with optional file path and environment variable overrides
+    /// Priority (highest to lowest): environment variables > config file > defaults
+    /// @param config_path Optional path to JSON config file
+    /// @return Loaded configuration
+    [[nodiscard]] static Config load(const std::optional<std::string>& config_path = std::nullopt);
 
     /// Build WebSocket path for combined streams
     [[nodiscard]] std::string ws_stream_path() const {
