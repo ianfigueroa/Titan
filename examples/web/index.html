@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Titan Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+      background: #0d1117;
+      color: #c9d1d9;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #21262d;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: #f0f6fc;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #f85149;
+    }
+
+    .status-dot.connected {
+      background: #3fb950;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      padding: 20px;
+    }
+
+    .card-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #8b949e;
+      margin-bottom: 12px;
+    }
+
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 8px;
+    }
+
+    .metric:last-child {
+      margin-bottom: 0;
+    }
+
+    .metric-label {
+      font-size: 14px;
+      color: #8b949e;
+    }
+
+    .metric-value {
+      font-size: 20px;
+      font-weight: 600;
+      color: #f0f6fc;
+    }
+
+    .metric-value.bid {
+      color: #3fb950;
+    }
+
+    .metric-value.ask {
+      color: #f85149;
+    }
+
+    .metric-value.neutral {
+      color: #58a6ff;
+    }
+
+    .alerts {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      padding: 20px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .alerts-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #8b949e;
+      margin-bottom: 12px;
+    }
+
+    .alert-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: #0d1117;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      animation: slideIn 0.3s ease;
+    }
+
+    .alert-item:last-child {
+      margin-bottom: 0;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    .alert-side {
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .alert-side.buy {
+      background: rgba(63, 185, 80, 0.2);
+      color: #3fb950;
+    }
+
+    .alert-side.sell {
+      background: rgba(248, 81, 73, 0.2);
+      color: #f85149;
+    }
+
+    .alert-details {
+      flex: 1;
+      margin-left: 12px;
+    }
+
+    .alert-price {
+      font-weight: 600;
+      color: #f0f6fc;
+    }
+
+    .alert-qty {
+      font-size: 12px;
+      color: #8b949e;
+    }
+
+    .alert-sigma {
+      font-size: 14px;
+      color: #f0883e;
+      font-weight: 600;
+    }
+
+    .no-alerts {
+      color: #484f58;
+      font-style: italic;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .connection-form {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .connection-form input {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: #c9d1d9;
+      font-family: inherit;
+      font-size: 14px;
+    }
+
+    .connection-form input:focus {
+      outline: none;
+      border-color: #58a6ff;
+    }
+
+    .connection-form button {
+      background: #238636;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .connection-form button:hover {
+      background: #2ea043;
+    }
+
+    .connection-form button.disconnect {
+      background: #da3633;
+    }
+
+    .connection-form button.disconnect:hover {
+      background: #f85149;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Titan Dashboard</h1>
+    <div class="status">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Disconnected</span>
+    </div>
+  </div>
+
+  <div class="connection-form">
+    <input type="text" id="host" value="localhost" placeholder="Host">
+    <input type="number" id="port" value="9001" placeholder="Port">
+    <button id="connectBtn" onclick="toggleConnection()">Connect</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Order Book</div>
+      <div class="metric">
+        <span class="metric-label">Best Bid</span>
+        <span class="metric-value bid" id="bestBid">--</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Best Ask</span>
+        <span class="metric-value ask" id="bestAsk">--</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Spread</span>
+        <span class="metric-value neutral" id="spread">-- bps</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Imbalance</span>
+        <span class="metric-value" id="imbalance">--%</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Trade Flow</div>
+      <div class="metric">
+        <span class="metric-label">VWAP</span>
+        <span class="metric-value neutral" id="vwap">--</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Buy Volume</span>
+        <span class="metric-value bid" id="buyVolume">--</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Sell Volume</span>
+        <span class="metric-value ask" id="sellVolume">--</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Trade Count</span>
+        <span class="metric-value" id="tradeCount">--</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="alerts">
+    <div class="alerts-title">Whale Alerts</div>
+    <div id="alertsList">
+      <div class="no-alerts">No alerts yet</div>
+    </div>
+  </div>
+
+  <script>
+    let ws = null;
+
+    function toggleConnection() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      } else {
+        connect();
+      }
+    }
+
+    function connect() {
+      const hostInput = document.getElementById('host').value.trim();
+      const portInput = document.getElementById('port').value;
+
+      // Validate host (alphanumeric, dots, hyphens only)
+      if (!/^[a-zA-Z0-9.-]+$/.test(hostInput)) {
+        document.getElementById('statusText').textContent = 'Invalid host';
+        return;
+      }
+
+      // Validate port (1-65535)
+      const port = parseInt(portInput, 10);
+      if (isNaN(port) || port < 1 || port > 65535) {
+        document.getElementById('statusText').textContent = 'Invalid port';
+        return;
+      }
+
+      const uri = `ws://${hostInput}:${port}`;
+
+      ws = new WebSocket(uri);
+
+      ws.onopen = () => {
+        document.getElementById('statusDot').classList.add('connected');
+        document.getElementById('statusText').textContent = 'Connected';
+        document.getElementById('connectBtn').textContent = 'Disconnect';
+        document.getElementById('connectBtn').classList.add('disconnect');
+      };
+
+      ws.onclose = () => {
+        document.getElementById('statusDot').classList.remove('connected');
+        document.getElementById('statusText').textContent = 'Disconnected';
+        document.getElementById('connectBtn').textContent = 'Connect';
+        document.getElementById('connectBtn').classList.remove('disconnect');
+      };
+
+      ws.onerror = () => {
+        document.getElementById('statusText').textContent = 'Connection Error';
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handleMessage(data);
+        } catch (e) {
+          console.error('Invalid JSON:', event.data);
+        }
+      };
+    }
+
+    function handleMessage(data) {
+      if (data.type === 'metrics') {
+        updateMetrics(data);
+      } else if (data.type === 'alert') {
+        addAlert(data);
+      }
+    }
+
+    function updateMetrics(data) {
+      const book = data.book || {};
+      const trade = data.trade || {};
+
+      document.getElementById('bestBid').textContent = formatPrice(book.bestBid);
+      document.getElementById('bestAsk').textContent = formatPrice(book.bestAsk);
+      document.getElementById('spread').textContent = `${(book.spreadBps || 0).toFixed(2)} bps`;
+
+      const imbalance = (book.imbalance || 0) * 100;
+      const imbalanceEl = document.getElementById('imbalance');
+      imbalanceEl.textContent = `${imbalance >= 0 ? '+' : ''}${imbalance.toFixed(0)}%`;
+      imbalanceEl.className = 'metric-value ' + (imbalance > 0 ? 'bid' : imbalance < 0 ? 'ask' : '');
+
+      document.getElementById('vwap').textContent = formatPrice(trade.vwap);
+      document.getElementById('buyVolume').textContent = formatVolume(trade.buyVolume);
+      document.getElementById('sellVolume').textContent = formatVolume(trade.sellVolume);
+      document.getElementById('tradeCount').textContent = trade.tradeCount || '--';
+    }
+
+    function sanitizeSide(side) {
+      const allowed = ['buy', 'sell'];
+      const lower = (side || '').toLowerCase();
+      return allowed.includes(lower) ? lower : '';
+    }
+
+    function addAlert(data) {
+      const alertsList = document.getElementById('alertsList');
+
+      // Remove "no alerts" message if present
+      const noAlerts = alertsList.querySelector('.no-alerts');
+      if (noAlerts) noAlerts.remove();
+
+      const alertEl = document.createElement('div');
+      alertEl.className = 'alert-item';
+
+      // Use DOM methods instead of innerHTML to prevent XSS
+      const sideEl = document.createElement('span');
+      sideEl.className = 'alert-side ' + sanitizeSide(data.side);
+      sideEl.textContent = data.side || '?';
+
+      const detailsEl = document.createElement('div');
+      detailsEl.className = 'alert-details';
+
+      const priceEl = document.createElement('span');
+      priceEl.className = 'alert-price';
+      priceEl.textContent = formatPrice(data.price);
+
+      const qtyEl = document.createElement('span');
+      qtyEl.className = 'alert-qty';
+      qtyEl.textContent = (data.quantity || 0) + ' units';
+
+      detailsEl.appendChild(priceEl);
+      detailsEl.appendChild(qtyEl);
+
+      const sigmaEl = document.createElement('span');
+      sigmaEl.className = 'alert-sigma';
+      sigmaEl.textContent = (data.sigma || 0).toFixed(1) + '\u03C3';
+
+      alertEl.appendChild(sideEl);
+      alertEl.appendChild(detailsEl);
+      alertEl.appendChild(sigmaEl);
+
+      alertsList.insertBefore(alertEl, alertsList.firstChild);
+
+      // Keep only last 20 alerts
+      while (alertsList.children.length > 20) {
+        alertsList.removeChild(alertsList.lastChild);
+      }
+    }
+
+    function formatPrice(value) {
+      if (value == null) return '--';
+      return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatVolume(value) {
+      if (value == null) return '--';
+      return value.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    }
+  </script>
+</body>
+</html>
