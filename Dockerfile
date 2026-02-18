@@ -19,6 +19,7 @@ RUN mkdir -p build && cd build && \
 FROM ubuntu:22.04
 
 RUN apt-get update && apt-get install -y \
+    ca-certificates \
     libboost-system1.74.0 \
     libssl3 \
     netcat-openbsd \
