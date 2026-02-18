@@ -88,6 +88,19 @@ void WebSocketServer::on_accept(boost::system::error_code ec, tcp::socket socket
         return;
     }
 
+    // Check connection limit before accepting
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        if (sessions_.size() >= MAX_CONNECTIONS) {
+            spdlog::warn("Connection limit reached ({}), rejecting client", MAX_CONNECTIONS);
+            socket.close();
+            if (running_) {
+                do_accept();
+            }
+            return;
+        }
+    }
+
     spdlog::debug("New WebSocket client connected");
 
     auto session = std::make_shared<WebSocketSession>(std::move(socket), *this);
@@ -229,6 +242,15 @@ void WebSocketSession::send(const std::string& message) {
             bool should_write = false;
             {
                 std::lock_guard<std::mutex> lock(self->write_mutex_);
+
+                // Protect against slow consumers - disconnect if queue too large
+                if (self->write_queue_.size() >= WebSocketServer::MAX_QUEUE_SIZE) {
+                    spdlog::warn("Client queue full, disconnecting slow consumer");
+                    self->server_.remove_session(self);
+                    self->close();
+                    return;
+                }
+
                 self->write_queue_.push_back(msg);
 
                 if (!self->writing_) {
