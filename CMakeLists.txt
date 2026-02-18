@@ -134,3 +134,15 @@ if(TITAN_BUILD_TESTS)
 
     gtest_discover_tests(titan_tests)
 endif()
+
+# Install targets
+include(GNUInstallDirs)
+install(TARGETS titan RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES config.example.json DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/titan RENAME config.json)
+
+# CPack configuration
+set(CPACK_PACKAGE_NAME "titan")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Real-time cryptocurrency market data engine")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
+include(CPack)
