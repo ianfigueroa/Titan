@@ -146,10 +146,10 @@ private:
 
     // Pad to avoid false sharing between head and tail
     alignas(kCacheLineSize) std::atomic<std::size_t> head_;
-    [[maybe_unused]] char pad1_[kCacheLineSize - sizeof(std::atomic<std::size_t>)];
+    char pad1_[kCacheLineSize - sizeof(std::atomic<std::size_t>)];
 
     alignas(kCacheLineSize) std::atomic<std::size_t> tail_;
-    [[maybe_unused]] char pad2_[kCacheLineSize - sizeof(std::atomic<std::size_t>)];
+    char pad2_[kCacheLineSize - sizeof(std::atomic<std::size_t>)];
 
     std::array<Slot, Capacity> slots_;
 };

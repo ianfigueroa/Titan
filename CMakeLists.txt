@@ -16,7 +16,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 include(CompilerWarnings)
 
 # Find system dependencies
-find_package(Boost 1.80 REQUIRED COMPONENTS system)
+find_package(Boost 1.74 REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 
@@ -67,7 +67,7 @@ target_include_directories(titan_lib PUBLIC
 )
 
 target_link_libraries(titan_lib PUBLIC
-    Boost::system
+    Boost::headers
     OpenSSL::SSL
     OpenSSL::Crypto
     Threads::Threads

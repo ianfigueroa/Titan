@@ -24,9 +24,11 @@ function(set_project_warnings target)
         list(APPEND GCC_CLANG_WARNINGS
             # Disable null-dereference as it triggers false positives in Boost headers
             -Wno-null-dereference
-            # Disable dangling-reference as it triggers false positives in spdlog/fmt
-            -Wno-dangling-reference
         )
+        # Disable dangling-reference (GCC 13+) as it triggers false positives in spdlog/fmt
+        if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "13.0")
+            list(APPEND GCC_CLANG_WARNINGS -Wno-dangling-reference)
+        endif()
     endif()
 
     set(MSVC_WARNINGS
