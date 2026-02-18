@@ -232,20 +232,21 @@ TEST(TradeFlowTest, BuySellVolumeTracking) {
 
 TEST(TradeFlowTest, LargeTradeAlert) {
     Config::Engine config;
-    config.vwap_window = 5;
+    config.vwap_window = 10;
     config.large_trade_std_devs = 2.0;
 
     TradeFlow flow(config);
 
-    // Add several small trades to establish baseline
-    for (int i = 0; i < 5; ++i) {
+    // Add several trades with varying quantities to establish baseline with non-zero std_dev
+    double quantities[] = {1.0, 1.5, 0.8, 1.2, 1.1, 0.9, 1.3, 0.7, 1.4, 1.0};
+    for (int i = 0; i < 10; ++i) {
         binance::AggTrade small_trade{
             .event_type = "aggTrade",
             .event_time = static_cast<uint64_t>(1699500000000 + i),
             .symbol = "BTCUSDT",
             .agg_trade_id = static_cast<uint64_t>(i + 1),
             .price = 42150.0,
-            .quantity = 1.0,
+            .quantity = quantities[i],
             .first_trade_id = static_cast<uint64_t>(i + 1),
             .last_trade_id = static_cast<uint64_t>(i + 1),
             .trade_time = static_cast<uint64_t>(1699500000000 + i),
@@ -254,22 +255,22 @@ TEST(TradeFlowTest, LargeTradeAlert) {
         (void)flow.process_trade(small_trade);
     }
 
-    // Add a very large trade
+    // Add a very large trade (far outside normal range)
     binance::AggTrade large_trade{
         .event_type = "aggTrade",
         .event_time = 1699500000010,
         .symbol = "BTCUSDT",
-        .agg_trade_id = 10,
+        .agg_trade_id = 11,
         .price = 42150.0,
-        .quantity = 100.0,  // Much larger than baseline
-        .first_trade_id = 10,
-        .last_trade_id = 10,
+        .quantity = 10.0,  // ~10x the mean, should be > 2 std devs
+        .first_trade_id = 11,
+        .last_trade_id = 11,
         .trade_time = 1699500000010,
         .is_buyer_maker = false
     };
 
     auto metrics = flow.process_trade(large_trade);
 
-    // Should have detected an alert (depending on calculated std dev)
+    // Should have detected an alert (large trade >> 2 std devs above mean)
     EXPECT_TRUE(metrics.last_alert.has_value());
 }

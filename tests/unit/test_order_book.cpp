@@ -5,25 +5,44 @@
 using namespace titan;
 using namespace titan::binance;
 
+namespace {
+
+// Helper to create a PriceLevel from double values
+PriceLevel make_level(double price, double qty) {
+    return PriceLevel{FixedPrice(price), qty};
+}
+
+// Helper to create price levels from initializer list of pairs
+std::vector<PriceLevel> make_levels(std::initializer_list<std::pair<double, double>> pairs) {
+    std::vector<PriceLevel> result;
+    result.reserve(pairs.size());
+    for (const auto& [price, qty] : pairs) {
+        result.push_back(make_level(price, qty));
+    }
+    return result;
+}
+
+}  // namespace
+
 class OrderBookTest : public ::testing::Test {
 protected:
     OrderBook book{5};  // 5 levels for imbalance calculation
 
     DepthSnapshot make_snapshot(SequenceId last_id,
-                                std::vector<PriceLevel> bids,
-                                std::vector<PriceLevel> asks) {
+                                std::initializer_list<std::pair<double, double>> bids,
+                                std::initializer_list<std::pair<double, double>> asks) {
         return DepthSnapshot{
             .last_update_id = last_id,
             .event_time = 0,
             .symbol = "BTCUSDT",
-            .bids = std::move(bids),
-            .asks = std::move(asks)
+            .bids = make_levels(bids),
+            .asks = make_levels(asks)
         };
     }
 
     DepthUpdate make_update(SequenceId first_id, SequenceId final_id, SequenceId prev_id,
-                            std::vector<PriceLevel> bids,
-                            std::vector<PriceLevel> asks) {
+                            std::initializer_list<std::pair<double, double>> bids,
+                            std::initializer_list<std::pair<double, double>> asks) {
         return DepthUpdate{
             .event_type = "depthUpdate",
             .event_time = 0,
@@ -32,16 +51,16 @@ protected:
             .first_update_id = first_id,
             .final_update_id = final_id,
             .prev_final_update_id = prev_id,
-            .bids = std::move(bids),
-            .asks = std::move(asks)
+            .bids = make_levels(bids),
+            .asks = make_levels(asks)
         };
     }
 };
 
 TEST_F(OrderBookTest, ApplySnapshot) {
     auto snapshot = make_snapshot(1000,
-        {{42150.0, 1.5}, {42149.0, 2.0}, {42148.0, 0.5}},  // bids
-        {{42151.0, 1.0}, {42152.0, 1.5}}                   // asks
+        {{42150.0, 1.5}, {42149.0, 2.0}, {42148.0, 0.5}},
+        {{42151.0, 1.0}, {42152.0, 1.5}}
     );
 
     auto metrics = book.apply_snapshot(snapshot);
@@ -126,8 +145,8 @@ TEST_F(OrderBookTest, SpreadInBasisPoints) {
     auto metrics = book.apply_snapshot(snapshot);
 
     // Spread = 1.0, mid = 42150.5
-    // Spread in bps = (1.0 / 42150.5) * 10000 ≈ 2.37
-    EXPECT_NEAR(metrics.spread_bps, 2.37, 0.01);
+    // Spread in bps = (1.0 / 42150.5) * 10000 ≈ 0.237
+    EXPECT_NEAR(metrics.spread_bps, 0.237, 0.001);
 }
 
 TEST_F(OrderBookTest, ImbalanceCalculation) {
@@ -224,11 +243,18 @@ TEST_F(OrderBookTest, CachedBestIteratorsPerformance) {
     // Apply snapshot with many levels
     std::vector<PriceLevel> bids, asks;
     for (int i = 0; i < 100; ++i) {
-        bids.emplace_back(42150.0 - i, 1.0);
-        asks.emplace_back(42151.0 + i, 1.0);
+        bids.push_back(make_level(42150.0 - i, 1.0));
+        asks.push_back(make_level(42151.0 + i, 1.0));
     }
 
-    (void)book.apply_snapshot(make_snapshot(1000, bids, asks));
+    DepthSnapshot snapshot{
+        .last_update_id = 1000,
+        .event_time = 0,
+        .symbol = "BTCUSDT",
+        .bids = std::move(bids),
+        .asks = std::move(asks)
+    };
+    (void)book.apply_snapshot(snapshot);
 
     // Multiple snapshots should all be O(1) for best bid/ask access
     for (int i = 0; i < 1000; ++i) {

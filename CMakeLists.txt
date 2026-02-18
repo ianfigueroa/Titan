@@ -117,6 +117,8 @@ if(TITAN_BUILD_TESTS)
         tests/unit/test_vwap.cpp
         tests/unit/test_message_parser.cpp
         tests/unit/test_status.cpp
+        tests/unit/test_config.cpp
+        tests/unit/test_fixed_point.cpp
     )
 
     target_link_libraries(titan_tests PRIVATE
