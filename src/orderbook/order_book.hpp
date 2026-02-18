@@ -46,8 +46,8 @@ public:
     [[nodiscard]] std::size_t ask_levels() const noexcept;
 
 private:
-    void apply_bid_update(Price price, Quantity qty);
-    void apply_ask_update(Price price, Quantity qty);
+    void apply_bid_update(FixedPrice price, Quantity qty);
+    void apply_ask_update(FixedPrice price, Quantity qty);
     void invalidate_best_cache();
     void update_best_bid_cache() const;
     void update_best_ask_cache() const;

@@ -15,6 +15,7 @@ BookSnapshot OrderBook::apply_snapshot(const binance::DepthSnapshot& snapshot) {
     invalidate_best_cache();
 
     // Apply all levels from snapshot
+    // price is FixedPrice (exact key), qty is double
     for (const auto& [price, qty] : snapshot.bids) {
         if (qty > 0.0) {
             bids_[price] = qty;
@@ -48,7 +49,7 @@ BookSnapshot OrderBook::apply_update(const binance::DepthUpdate& update) {
     return build_snapshot();
 }
 
-void OrderBook::apply_bid_update(Price price, Quantity qty) {
+void OrderBook::apply_bid_update(FixedPrice price, Quantity qty) {
     if (qty > 0.0) {
         bids_[price] = qty;
     } else {
@@ -65,7 +66,7 @@ void OrderBook::apply_bid_update(Price price, Quantity qty) {
     best_bid_valid_ = false;
 }
 
-void OrderBook::apply_ask_update(Price price, Quantity qty) {
+void OrderBook::apply_ask_update(FixedPrice price, Quantity qty) {
     if (qty > 0.0) {
         asks_[price] = qty;
     } else {
@@ -138,12 +139,14 @@ BookSnapshot OrderBook::build_snapshot() const {
         // Return default values for empty book
         if (!bids_.empty()) {
             update_best_bid_cache();
-            snap.best_bid = best_bid_it_->first;
+            // Convert FixedPrice to double for display
+            snap.best_bid = best_bid_it_->first.to_double();
             snap.best_bid_qty = best_bid_it_->second;
         }
         if (!asks_.empty()) {
             update_best_ask_cache();
-            snap.best_ask = best_ask_it_->first;
+            // Convert FixedPrice to double for display
+            snap.best_ask = best_ask_it_->first.to_double();
             snap.best_ask_qty = best_ask_it_->second;
         }
         snap.imbalance = calculate_imbalance();
@@ -154,9 +157,10 @@ BookSnapshot OrderBook::build_snapshot() const {
     update_best_bid_cache();
     update_best_ask_cache();
 
-    snap.best_bid = best_bid_it_->first;
+    // Convert FixedPrice to double for display
+    snap.best_bid = best_bid_it_->first.to_double();
     snap.best_bid_qty = best_bid_it_->second;
-    snap.best_ask = best_ask_it_->first;
+    snap.best_ask = best_ask_it_->first.to_double();
     snap.best_ask_qty = best_ask_it_->second;
 
     snap.spread = snap.best_ask - snap.best_bid;
