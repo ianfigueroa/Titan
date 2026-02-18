@@ -149,10 +149,37 @@ void WebSocketSession::start() {
         }
     ));
 
-    // Accept the WebSocket handshake
+    // First read the HTTP upgrade request from the browser
+    // This is required for RFC 6455 compliant WebSocket handshake
+    boost::beast::http::async_read(
+        ws_.next_layer(),
+        http_buffer_,
+        upgrade_request_,
+        [self = shared_from_this()](boost::system::error_code ec, std::size_t bytes) {
+            self->on_http_read(ec, bytes);
+        }
+    );
+}
+
+void WebSocketSession::on_http_read(boost::system::error_code ec, std::size_t /*bytes_transferred*/) {
+    if (ec) {
+        spdlog::debug("HTTP upgrade read error: {}", ec.message());
+        server_.remove_session(shared_from_this());
+        return;
+    }
+
+    // Validate this is a WebSocket upgrade request
+    if (!boost::beast::websocket::is_upgrade(upgrade_request_)) {
+        spdlog::debug("Received non-WebSocket HTTP request");
+        server_.remove_session(shared_from_this());
+        return;
+    }
+
+    // Accept the WebSocket handshake with the parsed HTTP request
     ws_.async_accept(
-        [self = shared_from_this()](boost::system::error_code ec) {
-            self->on_accept(ec);
+        upgrade_request_,
+        [self = shared_from_this()](boost::system::error_code accept_ec) {
+            self->on_accept(accept_ec);
         }
     );
 }
@@ -194,13 +221,27 @@ void WebSocketSession::on_read(boost::system::error_code ec, std::size_t /*bytes
 }
 
 void WebSocketSession::send(const std::string& message) {
-    std::lock_guard<std::mutex> lock(write_mutex_);
-    write_queue_.push_back(message);
+    // Post to the io_context to ensure thread safety
+    // async operations must be called from the io_context's thread
+    boost::asio::post(
+        ws_.get_executor(),
+        [self = shared_from_this(), msg = message]() {
+            bool should_write = false;
+            {
+                std::lock_guard<std::mutex> lock(self->write_mutex_);
+                self->write_queue_.push_back(msg);
 
-    if (!writing_) {
-        writing_ = true;
-        do_write();
-    }
+                if (!self->writing_) {
+                    self->writing_ = true;
+                    should_write = true;
+                }
+            }
+            // Call do_write outside the lock to avoid deadlock
+            if (should_write) {
+                self->do_write();
+            }
+        }
+    );
 }
 
 void WebSocketSession::do_write() {
