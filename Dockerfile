@@ -21,10 +21,15 @@ RUN apt-get update && apt-get install -y \
     libboost-system1.74.0 \
     libssl3 \
     netcat-openbsd \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -r -s /bin/false titan \
+    && mkdir -p /etc/titan \
+    && chown titan:titan /etc/titan
 
-COPY --from=builder /app/build/titan /usr/local/bin/
-COPY config.example.json /etc/titan/config.json
+COPY --from=builder --chown=titan:titan /app/build/titan /usr/local/bin/
+COPY --chown=titan:titan config.example.json /etc/titan/config.json
+
+USER titan
 
 EXPOSE 9001
 

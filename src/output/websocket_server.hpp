@@ -27,6 +27,12 @@ class WebSocketServer {
 public:
     using tcp = boost::asio::ip::tcp;
 
+    /// Maximum number of concurrent client connections
+    static constexpr std::size_t MAX_CONNECTIONS = 1000;
+
+    /// Maximum messages in queue per client before disconnecting
+    static constexpr std::size_t MAX_QUEUE_SIZE = 500;
+
     /// Create a WebSocket server
     /// @param port Port to listen on
     explicit WebSocketServer(std::uint16_t port);
