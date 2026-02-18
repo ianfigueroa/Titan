@@ -1,0 +1,10 @@
+services:
+  titan:
+    build: .
+    ports:
+      - "9001:9001"
+    volumes:
+      - ./config.json:/etc/titan/config.json:ro
+    environment:
+      - TITAN_SYMBOL=btcusdt
+    restart: unless-stopped

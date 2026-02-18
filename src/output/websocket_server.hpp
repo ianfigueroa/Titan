@@ -3,6 +3,8 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
+#include <boost/beast/http/empty_body.hpp>
+#include <boost/beast/http/read.hpp>
 #include <boost/beast/websocket/stream.hpp>
 #include <atomic>
 #include <cstdint>
@@ -87,6 +89,7 @@ public:
     void close();
 
 private:
+    void on_http_read(boost::system::error_code ec, std::size_t bytes_transferred);
     void on_accept(boost::system::error_code ec);
     void do_read();
     void on_read(boost::system::error_code ec, std::size_t bytes_transferred);
@@ -96,6 +99,8 @@ private:
     ws_stream ws_;
     WebSocketServer& server_;
     boost::beast::flat_buffer buffer_;
+    boost::beast::flat_buffer http_buffer_;
+    boost::beast::http::request<boost::beast::http::empty_body> upgrade_request_;
 
     std::mutex write_mutex_;
     std::deque<std::string> write_queue_;
