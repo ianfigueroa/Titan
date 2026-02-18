@@ -7,10 +7,6 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
   build-linux:
     runs-on: ubuntu-22.04
@@ -20,15 +16,21 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libboost-all-dev libssl-dev
 
-      - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DTITAN_BUILD_TESTS=ON
 
       - name: Build
         run: cmake --build build -j$(nproc)
 
       - name: Run tests
-        working-directory: build
-        run: ctest --output-on-failure
+        run: ./build/titan_tests --gtest_output=xml:build/test-results.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-linux
+          path: build/test-results.xml
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
@@ -37,24 +39,30 @@ jobs:
           path: build/titan
 
   build-macos:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: brew install boost openssl
 
-      - name: Configure
+      - name: Configure CMake
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DTITAN_BUILD_TESTS=ON \
             -DOPENSSL_ROOT_DIR=$(brew --prefix openssl)
 
       - name: Build
         run: cmake --build build -j$(sysctl -n hw.ncpu)
 
       - name: Run tests
-        working-directory: build
-        run: ctest --output-on-failure
+        run: ./build/titan_tests --gtest_output=xml:build/test-results.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-macos
+          path: build/test-results.xml
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
@@ -70,43 +78,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Log in to Container Registry
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Build Docker image
+        run: docker build -t ghcr.io/ianfigueroa/titan:${{ github.sha }} -t ghcr.io/ianfigueroa/titan:latest .
 
       - name: Test Docker image
+        run: docker run --rm ghcr.io/ianfigueroa/titan:latest --help
+
+      - name: Push Docker image
+        if: github.event_name != 'pull_request'
         run: |
-          docker build -t titan-test .
-          docker run --rm titan-test --help
+          docker push ghcr.io/ianfigueroa/titan:${{ github.sha }}
+          docker push ghcr.io/ianfigueroa/titan:latest
 
   release:
     needs: [build-linux, build-macos, docker]
@@ -117,10 +107,15 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
 
+      - name: Rename binaries
+        run: |
+          mv titan-linux-x64/titan titan-linux-x64/titan-linux-x64
+          mv titan-macos-x64/titan titan-macos-x64/titan-macos-x64
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            titan-linux-x64/titan
-            titan-macos-x64/titan
+            titan-linux-x64/titan-linux-x64
+            titan-macos-x64/titan-macos-x64
           generate_release_notes: true
