@@ -83,12 +83,12 @@ TEST(MessageParserTest, ParseDepthUpdate) {
     EXPECT_EQ(update.prev_final_update_id, 1000000000u);
 
     ASSERT_EQ(update.bids.size(), 3u);
-    EXPECT_DOUBLE_EQ(update.bids[0].first, 42150.50);
+    EXPECT_DOUBLE_EQ(update.bids[0].first.to_double(), 42150.50);
     EXPECT_DOUBLE_EQ(update.bids[0].second, 1.500);
     EXPECT_DOUBLE_EQ(update.bids[2].second, 0.0);  // Zero qty = remove level
 
     ASSERT_EQ(update.asks.size(), 2u);
-    EXPECT_DOUBLE_EQ(update.asks[0].first, 42151.00);
+    EXPECT_DOUBLE_EQ(update.asks[0].first.to_double(), 42151.00);
     EXPECT_DOUBLE_EQ(update.asks[1].second, 0.800);
 }
 
@@ -140,11 +140,11 @@ TEST(MessageParserTest, ParseDepthSnapshot) {
     EXPECT_EQ(snapshot.symbol, "BTCUSDT");
 
     ASSERT_EQ(snapshot.bids.size(), 2u);
-    EXPECT_DOUBLE_EQ(snapshot.bids[0].first, 42150.50);
+    EXPECT_DOUBLE_EQ(snapshot.bids[0].first.to_double(), 42150.50);
     EXPECT_DOUBLE_EQ(snapshot.bids[1].second, 2.000);
 
     ASSERT_EQ(snapshot.asks.size(), 2u);
-    EXPECT_DOUBLE_EQ(snapshot.asks[0].first, 42151.00);
+    EXPECT_DOUBLE_EQ(snapshot.asks[0].first.to_double(), 42151.00);
 }
 
 TEST(MessageParserTest, ParseCombinedStream) {

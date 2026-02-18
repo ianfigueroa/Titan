@@ -79,6 +79,7 @@ private:
     };
     SyncState sync_state_{SyncState::Initializing};
     SequenceId last_processed_id_{0};
+    std::size_t updates_since_snapshot_{0};
 
     // Threading
     std::thread network_thread_;

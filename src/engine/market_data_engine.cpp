@@ -163,17 +163,22 @@ void MarketDataEngine::handle_depth_update(const DepthUpdateMsg& msg) {
 
     const auto& update = msg.data;
 
-    // Check for sequence gap
-    if (last_processed_id_ > 0 &&
-        order_book_.has_sequence_gap(update.first_update_id, update.prev_final_update_id)) {
+    // Skip gap check for first few updates after snapshot
+    // The feed handler already validates the initial sync
+    if (updates_since_snapshot_ < 3) {
+        ++updates_since_snapshot_;
+    } else if (last_processed_id_ > 0) {
+        // Check sequence: prev_final_update_id should match our last processed
+        if (update.prev_final_update_id != last_processed_id_) {
+            spdlog::warn("Sequence gap detected: expected {}, got prev={}",
+                        last_processed_id_, update.prev_final_update_id);
 
-        spdlog::warn("Sequence gap detected: expected {}, got prev={}",
-                    last_processed_id_, update.prev_final_update_id);
-
-        sync_state_ = SyncState::WaitingSnapshot;
-        order_book_.clear();
-        feed_handler_->request_snapshot();
-        return;
+            sync_state_ = SyncState::WaitingSnapshot;
+            order_book_.clear();
+            updates_since_snapshot_ = 0;
+            feed_handler_->request_snapshot();
+            return;
+        }
     }
 
     (void)order_book_.apply_update(update);
@@ -198,6 +203,7 @@ void MarketDataEngine::handle_snapshot(const SnapshotMsg& msg) {
 
     (void)order_book_.apply_snapshot(msg.data);
     last_processed_id_ = msg.data.last_update_id;
+    updates_since_snapshot_ = 0;
     sync_state_ = SyncState::Synced;
 
     console_->log_sync_status("Synchronized");
@@ -226,6 +232,7 @@ void MarketDataEngine::handle_sequence_gap(const SequenceGap& msg) {
 
     sync_state_ = SyncState::WaitingSnapshot;
     order_book_.clear();
+    updates_since_snapshot_ = 0;
     feed_handler_->request_snapshot();
 }
 
