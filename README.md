@@ -1,6 +1,16 @@
 # Titan.cpp
 
+[![Build](https://github.com/ianfigueroa/Titan/actions/workflows/build.yml/badge.svg)](https://github.com/ianfigueroa/Titan/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/ianfigueroa/Titan)](https://github.com/ianfigueroa/Titan/releases)
+
 Real-time market data infrastructure for cryptocurrency trading. Connects to Binance Futures WebSocket, maintains a local order book, and streams processed data.
+
+## Try It Now (No Build Required)
+
+1. Download the latest binary from [Releases](https://github.com/ianfigueroa/Titan/releases)
+2. Run: `./titan`
+3. Open `examples/web/index.html` in your browser to see live data
 
 ## Features
 
