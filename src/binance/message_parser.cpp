@@ -9,6 +9,7 @@ using json = nlohmann::json;
 namespace {
 
 /// Parse price level array: ["price", "quantity"]
+/// Uses FixedPrice::parse for exact precision, stod for quantity
 std::vector<PriceLevel> parse_price_levels(const json& arr) {
     std::vector<PriceLevel> levels;
     levels.reserve(arr.size());
@@ -17,7 +18,9 @@ std::vector<PriceLevel> parse_price_levels(const json& arr) {
         if (!level.is_array() || level.size() < 2) {
             continue;
         }
-        Price price = std::stod(level[0].get<std::string>());
+        // Parse price as fixed-point for exact map key matching
+        FixedPrice price = FixedPrice::parse(level[0].get<std::string>());
+        // Quantity can stay as double for accumulation
         Quantity qty = std::stod(level[1].get<std::string>());
         levels.emplace_back(price, qty);
     }
