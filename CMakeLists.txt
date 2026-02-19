@@ -111,6 +111,7 @@ if(TITAN_BUILD_TESTS)
 
     include(GoogleTest)
 
+    # Unit tests
     add_executable(titan_tests
         tests/unit/test_spsc_queue.cpp
         tests/unit/test_order_book.cpp
@@ -133,6 +134,50 @@ if(TITAN_BUILD_TESTS)
     endif()
 
     gtest_discover_tests(titan_tests)
+
+    # Integration tests
+    add_executable(titan_integration_tests
+        tests/integration/test_pipeline.cpp
+    )
+
+    target_link_libraries(titan_integration_tests PRIVATE
+        titan_lib
+        GTest::gtest_main
+    )
+
+    set_project_warnings(titan_integration_tests)
+
+    if(TITAN_ENABLE_SANITIZERS)
+        enable_sanitizers(titan_integration_tests)
+    endif()
+
+    gtest_discover_tests(titan_integration_tests)
+endif()
+
+# Benchmarks (optional)
+option(TITAN_BUILD_BENCHMARKS "Build performance benchmarks" OFF)
+if(TITAN_BUILD_BENCHMARKS)
+    FetchContent_Declare(
+        benchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG v1.8.3
+        GIT_SHALLOW TRUE
+    )
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(benchmark)
+
+    # SPSC Queue benchmark
+    add_executable(bench_spsc_queue benchmarks/bench_spsc_queue.cpp)
+    target_link_libraries(bench_spsc_queue PRIVATE titan_lib benchmark::benchmark)
+
+    # Order Book benchmark
+    add_executable(bench_order_book benchmarks/bench_order_book.cpp)
+    target_link_libraries(bench_order_book PRIVATE titan_lib benchmark::benchmark)
+
+    # VWAP benchmark
+    add_executable(bench_vwap benchmarks/bench_vwap.cpp)
+    target_link_libraries(bench_vwap PRIVATE titan_lib benchmark::benchmark)
 endif()
 
 # Install targets

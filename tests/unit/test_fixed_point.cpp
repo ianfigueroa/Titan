@@ -141,6 +141,15 @@ TEST_F(FixedPointTest, MultiplicationWithDecimals) {
     EXPECT_DOUBLE_EQ(result.to_double(), 10.0);
 }
 
+// Suppress deprecation warnings for tests of legacy operator/
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable: 4996)
+#endif
+
 TEST_F(FixedPointTest, Division) {
     FP8 a(100.0);
     FP8 b(4.0);
@@ -191,6 +200,12 @@ TEST_F(FixedPointTest, CompoundDivision) {
     a /= FP8(4.0);
     EXPECT_DOUBLE_EQ(a.to_double(), 25.0);
 }
+
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 // ============================================================================
 // Parsing Tests
@@ -414,4 +429,77 @@ TEST_F(FixedPointTest, HashConsistency) {
 
     EXPECT_EQ(hasher(a), hasher(b));
     EXPECT_NE(hasher(a), hasher(c));
+}
+
+// ============================================================================
+// Safe Division Tests (try_divide)
+// ============================================================================
+
+TEST_F(FixedPointTest, TryDivideReturnsNulloptOnDivisionByZero) {
+    FP8 a(100.0);
+    FP8 zero(0.0);
+
+    auto result = a.try_divide(zero);
+
+    EXPECT_FALSE(result.has_value());
+}
+
+TEST_F(FixedPointTest, TryDivideReturnsValueOnValidDivision) {
+    FP8 a(100.0);
+    FP8 b(4.0);
+
+    auto result = a.try_divide(b);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_DOUBLE_EQ(result->to_double(), 25.0);
+}
+
+TEST_F(FixedPointTest, TryDivideWithDecimals) {
+    FP8 a(10.0);
+    FP8 b(4.0);
+
+    auto result = a.try_divide(b);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_DOUBLE_EQ(result->to_double(), 2.5);
+}
+
+TEST_F(FixedPointTest, TryDivideNegativeNumbers) {
+    FP8 a(-100.0);
+    FP8 b(4.0);
+
+    auto result = a.try_divide(b);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_DOUBLE_EQ(result->to_double(), -25.0);
+}
+
+TEST_F(FixedPointTest, TryDivideZeroDividend) {
+    FP8 zero(0.0);
+    FP8 b(4.0);
+
+    auto result = zero.try_divide(b);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_DOUBLE_EQ(result->to_double(), 0.0);
+}
+
+TEST_F(FixedPointTest, TryDivideNegativeDivisor) {
+    FP8 a(100.0);
+    FP8 b(-4.0);
+
+    auto result = a.try_divide(b);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_DOUBLE_EQ(result->to_double(), -25.0);
+}
+
+TEST_F(FixedPointTest, TryDivideBothNegative) {
+    FP8 a(-100.0);
+    FP8 b(-4.0);
+
+    auto result = a.try_divide(b);
+
+    ASSERT_TRUE(result.has_value());
+    EXPECT_DOUBLE_EQ(result->to_double(), 25.0);
 }
