@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -246,13 +247,24 @@ public:
     }
 
     /// Division: result = (a * scale) / b
-    /// NOTE: Division by zero returns zero by design. This is a deliberate safety
-    /// choice for financial calculations where a zero result is often more desirable
-    /// than a crash or exception. Code using this class should validate divisors
-    /// before performing division if different behavior is needed.
+    /// @deprecated Use try_divide() for safe division that returns std::optional.
+    /// This operator silently returns zero on division by zero, which can mask
+    /// bugs in financial calculations.
+    [[deprecated("Use try_divide() for safe division that returns std::optional")]]
     [[nodiscard]] FixedPoint operator/(const FixedPoint& other) const noexcept {
         if (other.value_ == 0) {
             return FixedPoint{}; // Return zero for division by zero
+        }
+        return from_raw(detail::mul_scale(value_, scale, other.value_));
+    }
+
+    /// Safe division that returns std::nullopt on division by zero
+    /// Preferred over operator/ for financial code where division by zero
+    /// must be explicitly handled
+    /// @return Result of division, or std::nullopt if divisor is zero
+    [[nodiscard]] std::optional<FixedPoint> try_divide(const FixedPoint& other) const noexcept {
+        if (other.value_ == 0) {
+            return std::nullopt;
         }
         return from_raw(detail::mul_scale(value_, scale, other.value_));
     }
@@ -268,13 +280,18 @@ public:
         return *this;
     }
 
-    constexpr FixedPoint& operator*=(const FixedPoint& other) noexcept {
+    FixedPoint& operator*=(const FixedPoint& other) noexcept {
         *this = *this * other;
         return *this;
     }
 
-    constexpr FixedPoint& operator/=(const FixedPoint& other) noexcept {
-        *this = *this / other;
+    [[deprecated("Use try_divide() for safe division")]]
+    FixedPoint& operator/=(const FixedPoint& other) noexcept {
+        if (other.value_ != 0) {
+            value_ = detail::mul_scale(value_, scale, other.value_);
+        } else {
+            value_ = 0;
+        }
         return *this;
     }
 
