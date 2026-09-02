@@ -3,9 +3,7 @@
 
 namespace titan::output {
 
-// ============================================================================
 // WebSocketServer
-// ============================================================================
 
 WebSocketServer::WebSocketServer(std::uint16_t port)
     : port_(port)
@@ -141,9 +139,7 @@ void WebSocketServer::remove_session(std::shared_ptr<WebSocketSession> session) 
     sessions_.erase(session);
 }
 
-// ============================================================================
 // WebSocketSession
-// ============================================================================
 
 WebSocketSession::WebSocketSession(tcp::socket socket, WebSocketServer& server)
     : ws_(std::move(socket))

@@ -6,9 +6,7 @@
 
 using namespace titan;
 
-// ============================================================================
 // VwapCalculator Tests
-// ============================================================================
 
 TEST(VwapCalculatorTest, SingleTrade) {
     VwapCalculator calc(100);
@@ -90,9 +88,7 @@ TEST(VwapCalculatorTest, EmptyCalculator) {
     EXPECT_DOUBLE_EQ(calc.rolling_std_dev(), 0.0);
 }
 
-// ============================================================================
 // AlertDetector Tests
-// ============================================================================
 
 TEST(AlertDetectorTest, NoAlertForNormalTrade) {
     AlertDetector detector(2.0);  // 2 std dev threshold
@@ -155,9 +151,7 @@ TEST(AlertDetectorTest, JustOverThresholdTriggers) {
     EXPECT_TRUE(alert.has_value());
 }
 
-// ============================================================================
 // TradeFlow Integration Tests
-// ============================================================================
 
 TEST(TradeFlowTest, ProcessTrade) {
     Config::Engine config;

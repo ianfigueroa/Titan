@@ -8,7 +8,6 @@ VwapCalculator::VwapCalculator(std::size_t window_size)
 {}
 
 double VwapCalculator::add_trade(Price price, Quantity quantity) {
-    // Add new trade
     trades_.push_back({price, quantity});
     sum_pv_ += price * quantity;
     sum_v_ += quantity;
@@ -24,7 +23,6 @@ double VwapCalculator::add_trade(Price price, Quantity quantity) {
     if (trades_.size() > window_size_) {
         const auto& old_trade = trades_.front();
 
-        // Update VWAP sums
         sum_pv_ -= old_trade.price * old_trade.quantity;
         sum_v_ -= old_trade.quantity;
 

@@ -10,9 +10,7 @@ using FP8 = FixedPoint<8>;
 
 class FixedPointTest : public ::testing::Test {};
 
-// ============================================================================
 // Construction Tests
-// ============================================================================
 
 TEST_F(FixedPointTest, DefaultConstructorIsZero) {
     FP8 fp;
@@ -40,9 +38,7 @@ TEST_F(FixedPointTest, FromRawValue) {
     EXPECT_EQ(fp.raw(), 12345678900000000LL);
 }
 
-// ============================================================================
 // Comparison Tests
-// ============================================================================
 
 TEST_F(FixedPointTest, Equality) {
     FP8 a(42.5);
@@ -89,9 +85,7 @@ TEST_F(FixedPointTest, GreaterThanOrEqual) {
     EXPECT_FALSE(a >= b);
 }
 
-// ============================================================================
 // Arithmetic Tests
-// ============================================================================
 
 TEST_F(FixedPointTest, Addition) {
     FP8 a(100.5);
@@ -207,9 +201,7 @@ TEST_F(FixedPointTest, CompoundDivision) {
 #pragma warning(pop)
 #endif
 
-// ============================================================================
 // Parsing Tests
-// ============================================================================
 
 TEST_F(FixedPointTest, ParseInteger) {
     auto fp = FP8::parse("42150");
@@ -270,9 +262,7 @@ TEST_F(FixedPointTest, ParseThrowsOnOnlySign) {
     EXPECT_THROW((void)FP8::parse("-"), std::invalid_argument);
 }
 
-// ============================================================================
 // String Conversion Tests
-// ============================================================================
 
 TEST_F(FixedPointTest, ToStringZero) {
     FP8 fp(0.0);
@@ -314,9 +304,7 @@ TEST_F(FixedPointTest, RoundTripConversion) {
     }
 }
 
-// ============================================================================
 // Utility Method Tests
-// ============================================================================
 
 TEST_F(FixedPointTest, IsZero) {
     EXPECT_TRUE(FP8(0.0).is_zero());
@@ -351,9 +339,7 @@ TEST_F(FixedPointTest, StaticOne) {
     EXPECT_DOUBLE_EQ(FP8::one().to_double(), 1.0);
 }
 
-// ============================================================================
 // Map Key Behavior Tests (Critical for Order Book)
-// ============================================================================
 
 TEST_F(FixedPointTest, MapKeyBehavior) {
     std::map<FP8, int> price_map;
@@ -389,9 +375,7 @@ TEST_F(FixedPointTest, MapKeyOrdering) {
     EXPECT_DOUBLE_EQ(it->first.to_double(), 42152.0);
 }
 
-// ============================================================================
 // Edge Cases
-// ============================================================================
 
 TEST_F(FixedPointTest, SmallestPositiveValue) {
     auto fp = FP8::from_raw(1);
@@ -416,9 +400,7 @@ TEST_F(FixedPointTest, VerySmallMultiplication) {
     EXPECT_NEAR(result.to_double(), 0.00000001, 1e-8);
 }
 
-// ============================================================================
 // Hash Support Tests (for potential use in unordered containers)
-// ============================================================================
 
 TEST_F(FixedPointTest, HashConsistency) {
     std::hash<FP8> hasher;
@@ -431,9 +413,7 @@ TEST_F(FixedPointTest, HashConsistency) {
     EXPECT_NE(hasher(a), hasher(c));
 }
 
-// ============================================================================
 // Safe Division Tests (try_divide)
-// ============================================================================
 
 TEST_F(FixedPointTest, TryDivideReturnsNulloptOnDivisionByZero) {
     FP8 a(100.0);

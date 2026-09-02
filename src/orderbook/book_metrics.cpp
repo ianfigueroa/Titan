@@ -1,13 +1,8 @@
 #include "orderbook/book_metrics.hpp"
 
-// Implementation is header-only for inline functions
-// This file exists for potential future non-inline implementations
+// Metrics are header-only and inline; this translation unit is a placeholder
+// for any that later warrant an out-of-line implementation.
 
 namespace titan::book_metrics {
-
-// Future: more complex metrics that benefit from .cpp implementation
-// - Full book depth analysis
-// - Order flow imbalance over time
-// - Liquidity measurements
 
 }  // namespace titan::book_metrics

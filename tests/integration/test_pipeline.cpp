@@ -33,9 +33,7 @@ std::vector<PriceLevel> make_levels(std::initializer_list<std::pair<double, doub
 
 }  // namespace
 
-// ============================================================================
 // Pipeline Integration Tests
-// ============================================================================
 
 class PipelineIntegrationTest : public ::testing::Test {
 protected:

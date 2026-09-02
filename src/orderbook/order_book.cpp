@@ -9,13 +9,11 @@ OrderBook::OrderBook(std::size_t imbalance_levels)
 {}
 
 BookSnapshot OrderBook::apply_snapshot(const binance::DepthSnapshot& snapshot) {
-    // Clear existing data
     bids_.clear();
     asks_.clear();
     invalidate_best_cache();
 
-    // Apply all levels from snapshot
-    // price is FixedPrice (exact key), qty is double
+    // price is a FixedPrice (exact map key); qty stays double
     for (const auto& [price, qty] : snapshot.bids) {
         if (qty > 0.0) {
             bids_[price] = qty;
