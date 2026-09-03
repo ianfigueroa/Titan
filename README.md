@@ -328,6 +328,30 @@ cd build
 ./titan_tests
 ```
 
+### Benchmarks
+
+Configure with `-DTITAN_BUILD_BENCHMARKS=ON`. Alongside the Google Benchmark
+microbenchmarks (`bench_spsc_queue`, `bench_order_book`, `bench_vwap`), the SPSC
+queue has a standalone cross-thread throughput bench that measures the real
+producer/consumer hand-off (the Google Benchmark case only covers single-threaded
+push/pop):
+
+```bash
+cmake -B build -DTITAN_BUILD_BENCHMARKS=ON
+cmake --build build --target bench_spsc_throughput
+./build/bench_spsc_throughput          # 500M events (default)
+```
+
+Measured on MinGW g++ 15.2 `-O3 -march=native`, **run in isolation** — concurrent
+load on the machine understates throughput by ~25%:
+
+```
+SPSC hand-off: ~225 M events/s, ~4.4 ns/handoff
+```
+
+This is an isolated queue-handoff microbench and is hardware-dependent; expect
+lower on a slower machine.
+
 ## Troubleshooting
 
 ### Connection Issues
