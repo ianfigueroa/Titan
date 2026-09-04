@@ -4,11 +4,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/ianfigueroa/Titan)](https://github.com/ianfigueroa/Titan/releases)
 
-High-performance market data engine for cryptocurrency trading applications. Connects to Binance Futures, processes order book and trade data, and streams analytics via WebSocket.
+A C++ market data engine for Binance Futures. It keeps a local order book in sync with the exchange, computes VWAP, spread, imbalance and whale-trade alerts, and streams them to whatever you connect over WebSocket. I wrote it so TapeFlow and a few scripts could share one Binance connection and get the number crunching done in C++ instead of in the browser.
 
-## What It Does
+## How it fits
 
-Titan runs as a standalone service that your application connects to via WebSocket:
+Titan runs as its own process and your app talks to it over a local WebSocket:
 
 ```
 Your App (Python/Node/Go/etc)
@@ -29,12 +29,12 @@ Your App (Python/Node/Go/etc)
    Binance Futures API
 ```
 
-**Why use Titan instead of connecting directly to Binance?**
-- Pre-calculated analytics (VWAP, imbalance, spread in bps)
-- Whale trade alerts using sigma-based detection
-- Order book with gap detection and automatic resync
-- Fixed-point arithmetic for precise calculations
-- One Binance connection shared by multiple clients
+What you get over connecting to Binance yourself:
+- VWAP, imbalance and spread in bps already computed
+- whale alerts when a trade is more than N standard deviations above the recent mean
+- an order book that detects sequence gaps and resyncs from a REST snapshot on its own
+- fixed-point prices, so no float drift in the money math
+- one exchange connection shared by every client
 
 ## Installation
 
@@ -242,13 +242,6 @@ services:
       - TITAN_URL=ws://titan:9001
 ```
 
-## Use Cases
-
-- **Trading terminals**: Real-time order book display, whale alerts
-- **Algorithmic trading**: VWAP signals, imbalance detection
-- **Analytics dashboards**: Market microstructure visualization
-- **Alert systems**: Whale trade notifications
-
 ## Architecture
 
 ```
@@ -342,63 +335,20 @@ cmake --build build --target bench_spsc_throughput
 ./build/bench_spsc_throughput          # 500M events (default)
 ```
 
-Measured on MinGW g++ 15.2 `-O3 -march=native`, **run in isolation** — concurrent
-load on the machine understates throughput by ~25%:
+On a Ryzen 9 8945HS with MinGW g++ 15.2 `-O3 -march=native`, with nothing else running (other load on the box knocks 20-25% off):
 
 ```
 SPSC hand-off: ~225 M events/s, ~4.4 ns/handoff
 ```
 
-This is an isolated queue-handoff microbench and is hardware-dependent; expect
-lower on a slower machine.
+That is the queue hand-off on its own, not end-to-end throughput, and it depends on the CPU.
 
-## Troubleshooting
+## When something looks off
 
-### Connection Issues
-
-**Titan can't connect to Binance**
-- Check your internet connection and firewall settings
-- Binance may be blocked in your region; try using a VPN
-- Verify the symbol exists on Binance Futures (e.g., `btcusdt`, not `btc-usdt`)
-
-**WebSocket clients can't connect to Titan**
-- Ensure Titan is running and listening on the expected port (default: 9001)
-- Check for port conflicts: `netstat -an | grep 9001`
-- When using Docker, ensure port mapping is correct: `-p 9001:9001`
-
-### Sync Issues
-
-**"Requesting snapshot" appears repeatedly**
-- This indicates sequence gaps in the depth stream
-- Normal during high volatility or network issues
-- If persistent, check your network latency to Binance
-
-**Order book shows stale data**
-- Verify the depth stream is connected (check console output)
-- Titan auto-recovers from disconnections; wait for resync
-
-### Performance
-
-**High CPU usage**
-- Normal during high market activity
-- Reduce `depth_limit` in config if you don't need full book depth
-- Ensure you're running a release build, not debug
-
-**High memory usage**
-- Memory grows with number of connected WebSocket clients
-- Each client buffers pending messages during slow sends
-- Disconnect idle clients or increase queue limits
-
-### Docker Issues
-
-**Image won't start**
-- Check logs: `docker logs <container_id>`
-- Ensure port 9001 is not in use
-- Verify image pulled correctly: `docker images | grep titan`
-
-**Can't pull from ghcr.io**
-- Check your Docker login: `docker login ghcr.io`
-- The image is public, but some networks block ghcr.io
+- "Requesting snapshot" over and over means the depth stream has sequence gaps. That is normal for a few seconds during a burst; if it never stops, your latency to Binance is the problem.
+- If Binance refuses the connection, it is usually a region block. The symbol has to be the Futures spelling (`btcusdt`, not `btc-usdt`).
+- CPU goes up with market activity. If you do not need the full book, lower `depth_limit`. Make sure it is a release build.
+- Memory grows with the number of connected clients because each one gets its own send queue. Drop idle clients.
 
 ## License
 
