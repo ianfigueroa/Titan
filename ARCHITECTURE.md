@@ -41,7 +41,7 @@ Titan is a real-time market data infrastructure designed for low-latency process
 
 ### Key Design Decisions
 
-1. **No Shared State**: Network and engine threads communicate exclusively through a lock-free SPSC queue
+1. **One queue between network and engine**: the network and engine threads only talk through a lock-free SPSC queue
 2. **Shared SSL Context**: Single `ssl::context` reused by REST and WebSocket clients for efficiency
 3. **Independent WS Server**: Runs on separate `io_context` to prevent client issues from blocking feed
 4. **Async Logging**: spdlog configured with `overrun_oldest` policy to never block
@@ -222,17 +222,15 @@ current_delay *= multiplier
 ## Performance Considerations
 
 1. **O(1) BBO Access**: Cached iterators for best bid/ask
-2. **Zero-Copy Queue**: Move semantics throughout message path
+2. **Moves, not copies**: messages are moved through the queue
 3. **Cache Line Padding**: SPSC queue head/tail on separate cache lines
 4. **Async Logging**: spdlog never blocks engine thread
 
 ## Queue Overflow Behavior
 
-The SPSC queue has a fixed capacity (default: 65536 messages). When the queue fills:
+The SPSC queue holds 65536 messages. The network thread never waits on it: if `try_push` fails because the queue is full, the message is dropped and a "Queue full, dropping message" warning is logged.
 
-1. **Producer blocks**: Network thread waits for space, potentially dropping incoming messages
-2. **Binance reconnects**: If too many messages are dropped, sequence gaps trigger resync
-3. **Auto-recovery**: System requests fresh snapshot and rebuilds book state
+A dropped depth update leaves a gap in the update IDs, so the next update fails the sequence check and the engine requests a fresh snapshot and rebuilds the book.
 
 **Monitoring queue health:**
 - Watch for "Requesting snapshot" messages in logs
@@ -241,8 +239,8 @@ The SPSC queue has a fixed capacity (default: 65536 messages). When the queue fi
 
 **Tuning:**
 ```cpp
-// In src/queue/spsc_queue.hpp
-static constexpr size_t kDefaultCapacity = 65536;  // ~1MB for typical messages
+// In src/engine/market_data_engine.hpp (capacity must be a power of 2)
+SpscQueue<EngineMessage, 65536> queue_;
 ```
 
 ## Deployment Recommendations
@@ -274,22 +272,6 @@ services:
     ports: ["9002:9001"]
     environment: [TITAN_SYMBOL=ethusdt]
 ```
-
-### Production Checklist
-
-- [ ] Use release builds (not debug)
-- [ ] Set appropriate resource limits in Docker
-- [ ] Monitor container health and restart policy
-- [ ] Log aggregation for debugging
-- [ ] Network proximity to Binance servers (AWS Tokyo/Singapore)
-
-### Resource Requirements
-
-| Metric | Typical | High Activity |
-|--------|---------|---------------|
-| CPU | < 5% | 10-15% |
-| Memory | ~50 MB | ~100 MB |
-| Network | ~10 KB/s | ~50 KB/s |
 
 ## Future Enhancements
 
