@@ -33,11 +33,17 @@ FetchContent_Declare(
 FetchContent_Declare(
     spdlog
     GIT_REPOSITORY https://github.com/gabime/spdlog.git
-    GIT_TAG v1.12.0
+    GIT_TAG v1.15.3
     GIT_SHALLOW TRUE
 )
 
 FetchContent_MakeAvailable(json spdlog)
+
+# third-party headers are not held to our -Werror flags
+foreach(dep spdlog nlohmann_json)
+    set_target_properties(${dep} PROPERTIES
+        INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "$<TARGET_PROPERTY:${dep},INTERFACE_INCLUDE_DIRECTORIES>")
+endforeach()
 
 # Collect source files
 set(TITAN_SOURCES
