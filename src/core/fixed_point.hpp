@@ -7,6 +7,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 namespace titan {
@@ -118,7 +119,7 @@ public:
     /// Parse from string
     /// @throws std::invalid_argument for invalid format
     /// @throws std::overflow_error if value is too large
-    [[nodiscard]] static FixedPoint parse(const std::string& str) {
+    [[nodiscard]] static FixedPoint parse(std::string_view str) {
         if (str.empty()) {
             return FixedPoint{};
         }

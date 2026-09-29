@@ -2,6 +2,7 @@
 #include "core/fixed_point.hpp"
 #include <limits>
 #include <string>
+#include <string_view>
 
 using namespace titan;
 
@@ -482,4 +483,10 @@ TEST_F(FixedPointTest, TryDivideBothNegative) {
 
     ASSERT_TRUE(result.has_value());
     EXPECT_DOUBLE_EQ(result->to_double(), 25.0);
+}
+
+TEST_F(FixedPointTest, ParseStringViewWithoutTerminator) {
+    std::string_view buf = "42150.50,1.5";
+    auto price = FP8::parse(buf.substr(0, 8));
+    EXPECT_EQ(price, FP8::parse("42150.50"));
 }

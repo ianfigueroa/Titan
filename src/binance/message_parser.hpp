@@ -4,8 +4,12 @@
 #include "core/status.hpp"
 #include <string>
 #include <string_view>
+#include <variant>
 
 namespace titan::binance {
+
+/// Payload of one combined-stream message. monostate = a stream we don't handle.
+using StreamEvent = std::variant<std::monostate, DepthUpdate, AggTrade>;
 
 /// Parser for Binance WebSocket and REST API messages
 /// Converts raw JSON to typed structs
@@ -22,6 +26,10 @@ public:
     /// Parse a depth snapshot from REST API response
     [[nodiscard]] static Result<DepthSnapshot, std::string>
     parse_depth_snapshot(std::string_view json, std::string_view symbol);
+
+    /// Parse a combined stream message and its payload in one pass (hot path)
+    [[nodiscard]] static Result<StreamEvent, std::string>
+    parse_stream_event(std::string_view json);
 
     /// Parse a combined stream wrapper message
     [[nodiscard]] static Result<StreamMessage, std::string>

@@ -2,6 +2,7 @@
 #include "binance/endpoints.hpp"
 #include "binance/message_parser.hpp"
 #include <spdlog/spdlog.h>
+#include <utility>
 
 namespace titan::binance {
 
@@ -87,48 +88,37 @@ void FeedHandler::on_ws_connected() {
 }
 
 void FeedHandler::on_ws_message(std::string_view message) {
-    // Parse combined stream wrapper
-    auto stream_result = MessageParser::parse_combined_stream(message);
-    if (stream_result.is_err()) {
-        spdlog::warn("Failed to parse combined stream: {}", stream_result.error());
+    // Wrapper and payload are parsed in a single pass
+    auto result = MessageParser::parse_stream_event(message);
+    if (result.is_err()) {
+        spdlog::warn("Failed to parse stream message: {}", result.error());
         return;
     }
 
-    const auto& stream_msg = stream_result.value();
-
-    if (MessageParser::is_depth_stream(stream_msg.stream)) {
-        auto update_result = MessageParser::parse_depth_update(stream_msg.data);
-        if (update_result.is_ok()) {
-            process_depth_update(update_result.value());
-        } else {
-            spdlog::warn("Failed to parse depth update: {}", update_result.error());
-        }
-    } else if (MessageParser::is_agg_trade_stream(stream_msg.stream)) {
-        auto trade_result = MessageParser::parse_agg_trade(stream_msg.data);
-        if (trade_result.is_ok()) {
-            process_agg_trade(trade_result.value());
-        } else {
-            spdlog::warn("Failed to parse aggTrade: {}", trade_result.error());
-        }
+    auto event = std::move(result).take_value();
+    if (auto* update = std::get_if<DepthUpdate>(&event)) {
+        process_depth_update(std::move(*update));
+    } else if (auto* trade = std::get_if<AggTrade>(&event)) {
+        process_agg_trade(std::move(*trade));
     }
 }
 
-void FeedHandler::process_depth_update(const DepthUpdate& update) {
+void FeedHandler::process_depth_update(DepthUpdate update) {
     auto current_state = state_.load();
 
     if (current_state == FeedState::WaitingSnapshot) {
         // Buffer updates until snapshot arrives
-        buffered_updates_.push_back(update);
         spdlog::trace("Buffered depth update u={}", update.final_update_id);
+        buffered_updates_.push_back(std::move(update));
     } else if (current_state == FeedState::Live) {
         // Forward directly to engine
-        emit_message(DepthUpdateMsg{update, std::chrono::steady_clock::now()});
+        emit_message(DepthUpdateMsg{std::move(update), std::chrono::steady_clock::now()});
     }
 }
 
-void FeedHandler::process_agg_trade(const AggTrade& trade) {
+void FeedHandler::process_agg_trade(AggTrade trade) {
     // Trades are always forwarded immediately
-    emit_message(AggTradeMsg{trade, std::chrono::steady_clock::now()});
+    emit_message(AggTradeMsg{std::move(trade), std::chrono::steady_clock::now()});
 }
 
 void FeedHandler::on_ws_error(boost::system::error_code ec, std::string_view what) {

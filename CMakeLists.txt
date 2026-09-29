@@ -37,10 +37,17 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 
-FetchContent_MakeAvailable(json spdlog)
+FetchContent_Declare(
+    simdjson
+    GIT_REPOSITORY https://github.com/simdjson/simdjson.git
+    GIT_TAG v3.10.1
+    GIT_SHALLOW TRUE
+)
+
+FetchContent_MakeAvailable(json spdlog simdjson)
 
 # third-party headers are not held to our -Werror flags
-foreach(dep spdlog nlohmann_json)
+foreach(dep spdlog nlohmann_json simdjson)
     set_target_properties(${dep} PROPERTIES
         INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "$<TARGET_PROPERTY:${dep},INTERFACE_INCLUDE_DIRECTORIES>")
 endforeach()
@@ -79,6 +86,7 @@ target_link_libraries(titan_lib PUBLIC
     Threads::Threads
     nlohmann_json::nlohmann_json
     spdlog::spdlog
+    simdjson::simdjson
 )
 
 # Windows-specific socket libraries

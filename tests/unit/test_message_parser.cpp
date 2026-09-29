@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "binance/message_parser.hpp"
 #include <string>
+#include <variant>
 
 using namespace titan;
 using namespace titan::binance;
@@ -186,5 +187,80 @@ TEST(MessageParserTest, MissingFieldsReturnsError) {
     })";
 
     auto result = MessageParser::parse_depth_update(incomplete);
+    EXPECT_TRUE(result.is_err());
+}
+
+const char* COMBINED_DEPTH_JSON = R"({"stream":"btcusdt@depth@100ms","data":{"e":"depthUpdate","E":1699500000000,"T":1699500000001,"s":"BTCUSDT","U":1000000001,"u":1000000010,"pu":1000000000,"b":[["42150.50","1.500"],["42149.50","0.000"]],"a":[["42151.00","1.200"]]}})";
+
+const char* COMBINED_TRADE_JSON = R"({"stream":"btcusdt@aggTrade","data":{"e":"aggTrade","E":1699500000000,"s":"BTCUSDT","a":123456789,"p":"42150.75","q":"0.500","f":100000001,"l":100000005,"T":1699500000002,"m":true}})";
+
+TEST(MessageParserTest, ParseStreamEventDepth) {
+    auto result = MessageParser::parse_stream_event(COMBINED_DEPTH_JSON);
+    ASSERT_TRUE(result.is_ok()) << result.error();
+    ASSERT_TRUE(std::holds_alternative<DepthUpdate>(result.value()));
+
+    const auto& update = std::get<DepthUpdate>(result.value());
+    EXPECT_EQ(update.event_type, "depthUpdate");
+    EXPECT_EQ(update.transaction_time, 1699500000001u);
+    EXPECT_EQ(update.symbol, "BTCUSDT");
+    EXPECT_EQ(update.first_update_id, 1000000001u);
+    EXPECT_EQ(update.final_update_id, 1000000010u);
+    EXPECT_EQ(update.prev_final_update_id, 1000000000u);
+    ASSERT_EQ(update.bids.size(), 2u);
+    EXPECT_EQ(update.bids[0].first, FixedPrice::parse("42150.50"));
+    EXPECT_DOUBLE_EQ(update.bids[0].second, 1.5);
+    EXPECT_DOUBLE_EQ(update.bids[1].second, 0.0);
+    ASSERT_EQ(update.asks.size(), 1u);
+    EXPECT_DOUBLE_EQ(update.asks[0].second, 1.2);
+}
+
+TEST(MessageParserTest, ParseStreamEventAggTrade) {
+    auto result = MessageParser::parse_stream_event(COMBINED_TRADE_JSON);
+    ASSERT_TRUE(result.is_ok()) << result.error();
+    ASSERT_TRUE(std::holds_alternative<AggTrade>(result.value()));
+
+    const auto& trade = std::get<AggTrade>(result.value());
+    EXPECT_EQ(trade.agg_trade_id, 123456789u);
+    EXPECT_DOUBLE_EQ(trade.price, 42150.75);
+    EXPECT_DOUBLE_EQ(trade.quantity, 0.5);
+    EXPECT_EQ(trade.trade_time, 1699500000002u);
+    EXPECT_TRUE(trade.is_buyer_maker);
+}
+
+TEST(MessageParserTest, ParseStreamEventMatchesTwoStepParse) {
+    auto one_pass = MessageParser::parse_stream_event(COMBINED_DEPTH_JSON);
+    auto wrapper = MessageParser::parse_combined_stream(COMBINED_DEPTH_JSON);
+    ASSERT_TRUE(one_pass.is_ok() && wrapper.is_ok());
+    auto two_step = MessageParser::parse_depth_update(wrapper.value().data);
+    ASSERT_TRUE(two_step.is_ok()) << two_step.error();
+
+    const auto& a = std::get<DepthUpdate>(one_pass.value());
+    const auto& b = two_step.value();
+    EXPECT_EQ(a.final_update_id, b.final_update_id);
+    EXPECT_EQ(a.bids, b.bids);
+    EXPECT_EQ(a.asks, b.asks);
+}
+
+TEST(MessageParserTest, ParseStreamEventIgnoresOtherStreams) {
+    auto result = MessageParser::parse_stream_event(
+        R"({"stream":"btcusdt@markPrice","data":{"e":"markPriceUpdate"}})");
+    ASSERT_TRUE(result.is_ok()) << result.error();
+    EXPECT_TRUE(std::holds_alternative<std::monostate>(result.value()));
+}
+
+TEST(MessageParserTest, ParseStreamEventInvalidJsonReturnsError) {
+    EXPECT_TRUE(MessageParser::parse_stream_event("not valid json").is_err());
+    EXPECT_TRUE(MessageParser::parse_stream_event(R"({"stream":"btcusdt@depth@100ms"})").is_err());
+}
+
+TEST(MessageParserTest, ParseStreamEventMissingFieldReturnsError) {
+    auto result = MessageParser::parse_stream_event(
+        R"({"stream":"btcusdt@depth@100ms","data":{"e":"depthUpdate","E":1,"s":"BTCUSDT","U":1,"u":2,"b":[],"a":[]}})");
+    EXPECT_TRUE(result.is_err());  // no "pu"
+}
+
+TEST(MessageParserTest, BadQuantityReturnsError) {
+    auto result = MessageParser::parse_depth_update(
+        R"({"e":"depthUpdate","E":1,"s":"BTCUSDT","U":1,"u":2,"pu":0,"b":[["1.0","abc"]],"a":[]})");
     EXPECT_TRUE(result.is_err());
 }

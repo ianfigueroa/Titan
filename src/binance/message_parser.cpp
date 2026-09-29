@@ -1,158 +1,171 @@
 #include "binance/message_parser.hpp"
-#include <nlohmann/json.hpp>
-#include <spdlog/spdlog.h>
+#include <simdjson.h>
+#include <charconv>
+#include <stdexcept>
 
 namespace titan::binance {
 
-using json = nlohmann::json;
+namespace ondemand = simdjson::ondemand;
 
 namespace {
 
-/// Parse price level array: ["price", "quantity"]
-/// Uses FixedPrice::parse for exact precision, stod for quantity
-std::vector<PriceLevel> parse_price_levels(const json& arr) {
-    std::vector<PriceLevel> levels;
-    levels.reserve(arr.size());
+/// simdjson reads up to SIMDJSON_PADDING bytes past the end of the input, so
+/// each message is copied into a per-thread buffer that keeps that slack.
+/// The parser is reused too, so steady state does no allocation here.
+ondemand::document iterate(std::string_view json) {
+    thread_local ondemand::parser parser;
+    thread_local std::string buffer;
+    buffer.reserve(json.size() + simdjson::SIMDJSON_PADDING);
+    buffer.assign(json);
+    return parser.iterate(buffer.data(), buffer.size(), buffer.capacity());
+}
 
-    for (const auto& level : arr) {
-        if (!level.is_array() || level.size() < 2) {
+double parse_double(std::string_view s) {
+    double value{};
+    const char* end = s.data() + s.size();
+    auto [ptr, ec] = std::from_chars(s.data(), end, value);
+    if (ec != std::errc{} || ptr != end) {
+        throw std::invalid_argument("bad number: " + std::string(s));
+    }
+    return value;
+}
+
+/// Parse price level array: [["price", "quantity"], ...]
+/// FixedPrice::parse for exact map keys, from_chars for quantity
+std::vector<PriceLevel> parse_price_levels(ondemand::array arr) {
+    std::vector<PriceLevel> levels;
+
+    for (auto level : arr) {
+        ondemand::array pair;
+        if (level.get_array().get(pair) != simdjson::SUCCESS) {
             continue;
         }
-        // Parse price as fixed-point for exact map key matching
-        FixedPrice price = FixedPrice::parse(level[0].get<std::string>());
-        // Quantity can stay as double for accumulation
-        Quantity qty = std::stod(level[1].get<std::string>());
-        levels.emplace_back(price, qty);
+        std::string_view price;
+        std::string_view qty;
+        std::size_t n = 0;
+        for (auto field : pair) {
+            std::string_view text = field.get_string();
+            if (n == 0) price = text;
+            else if (n == 1) qty = text;
+            ++n;
+        }
+        if (n < 2) {
+            continue;
+        }
+        levels.emplace_back(FixedPrice::parse(price), parse_double(qty));
     }
 
     return levels;
 }
 
-}  // namespace
+// Fields are looked up in the order Binance sends them, which is the fast
+// path for simdjson's forward-only object iteration.
 
-Result<DepthUpdate, std::string> MessageParser::parse_depth_update(std::string_view json_str) {
+DepthUpdate depth_update_from(ondemand::object obj) {
+    DepthUpdate update;
+    update.event_type = std::string(std::string_view(obj["e"]));
+    update.event_time = obj["E"].get_uint64();
+    std::uint64_t transaction_time{};
+    update.transaction_time =
+        obj["T"].get_uint64().get(transaction_time) == simdjson::SUCCESS
+            ? transaction_time : update.event_time;
+    update.symbol = std::string(std::string_view(obj["s"]));
+    update.first_update_id = obj["U"].get_uint64();
+    update.final_update_id = obj["u"].get_uint64();
+    update.prev_final_update_id = obj["pu"].get_uint64();
+    update.bids = parse_price_levels(obj["b"].get_array());
+    update.asks = parse_price_levels(obj["a"].get_array());
+    return update;
+}
+
+AggTrade agg_trade_from(ondemand::object obj) {
+    AggTrade trade;
+    trade.event_type = std::string(std::string_view(obj["e"]));
+    trade.event_time = obj["E"].get_uint64();
+    trade.agg_trade_id = obj["a"].get_uint64();
+    trade.symbol = std::string(std::string_view(obj["s"]));
+    trade.price = parse_double(obj["p"].get_string());
+    trade.quantity = parse_double(obj["q"].get_string());
+    trade.first_trade_id = obj["f"].get_uint64();
+    trade.last_trade_id = obj["l"].get_uint64();
+    trade.trade_time = obj["T"].get_uint64();
+    trade.is_buyer_maker = obj["m"].get_bool();
+    return trade;
+}
+
+template <typename T, typename Fn>
+Result<T, std::string> guarded(Fn&& fn) {
     try {
-        auto j = json::parse(json_str);
-
-        // Validate required fields
-        if (!j.contains("e") || !j.contains("E") || !j.contains("s") ||
-            !j.contains("U") || !j.contains("u") || !j.contains("pu") ||
-            !j.contains("b") || !j.contains("a")) {
-            return Result<DepthUpdate, std::string>::Err("Missing required fields in depth update");
-        }
-
-        DepthUpdate update;
-        update.event_type = j["e"].get<std::string>();
-        update.event_time = j["E"].get<std::uint64_t>();
-        update.transaction_time = j.value("T", update.event_time);
-        update.symbol = j["s"].get<std::string>();
-        update.first_update_id = j["U"].get<SequenceId>();
-        update.final_update_id = j["u"].get<SequenceId>();
-        update.prev_final_update_id = j["pu"].get<SequenceId>();
-        update.bids = parse_price_levels(j["b"]);
-        update.asks = parse_price_levels(j["a"]);
-
-        return Result<DepthUpdate, std::string>::Ok(std::move(update));
-
-    } catch (const json::exception& e) {
-        return Result<DepthUpdate, std::string>::Err(
-            std::string("JSON parse error: ") + e.what()
-        );
+        return Result<T, std::string>::Ok(fn());
+    } catch (const simdjson::simdjson_error& e) {
+        return Result<T, std::string>::Err(std::string("JSON parse error: ") + e.what());
     } catch (const std::exception& e) {
-        return Result<DepthUpdate, std::string>::Err(
-            std::string("Parse error: ") + e.what()
-        );
+        return Result<T, std::string>::Err(std::string("Parse error: ") + e.what());
     }
 }
 
+}  // namespace
+
+Result<DepthUpdate, std::string> MessageParser::parse_depth_update(std::string_view json_str) {
+    return guarded<DepthUpdate>([&] {
+        auto doc = iterate(json_str);
+        return depth_update_from(doc.get_object());
+    });
+}
+
 Result<AggTrade, std::string> MessageParser::parse_agg_trade(std::string_view json_str) {
-    try {
-        auto j = json::parse(json_str);
-
-        // Validate required fields
-        if (!j.contains("e") || !j.contains("E") || !j.contains("s") ||
-            !j.contains("a") || !j.contains("p") || !j.contains("q") ||
-            !j.contains("f") || !j.contains("l") || !j.contains("T") ||
-            !j.contains("m")) {
-            return Result<AggTrade, std::string>::Err("Missing required fields in aggTrade");
-        }
-
-        AggTrade trade;
-        trade.event_type = j["e"].get<std::string>();
-        trade.event_time = j["E"].get<std::uint64_t>();
-        trade.symbol = j["s"].get<std::string>();
-        trade.agg_trade_id = j["a"].get<TradeId>();
-        trade.price = std::stod(j["p"].get<std::string>());
-        trade.quantity = std::stod(j["q"].get<std::string>());
-        trade.first_trade_id = j["f"].get<TradeId>();
-        trade.last_trade_id = j["l"].get<TradeId>();
-        trade.trade_time = j["T"].get<std::uint64_t>();
-        trade.is_buyer_maker = j["m"].get<bool>();
-
-        return Result<AggTrade, std::string>::Ok(std::move(trade));
-
-    } catch (const json::exception& e) {
-        return Result<AggTrade, std::string>::Err(
-            std::string("JSON parse error: ") + e.what()
-        );
-    } catch (const std::exception& e) {
-        return Result<AggTrade, std::string>::Err(
-            std::string("Parse error: ") + e.what()
-        );
-    }
+    return guarded<AggTrade>([&] {
+        auto doc = iterate(json_str);
+        return agg_trade_from(doc.get_object());
+    });
 }
 
 Result<DepthSnapshot, std::string> MessageParser::parse_depth_snapshot(
     std::string_view json_str,
     std::string_view symbol
 ) {
-    try {
-        auto j = json::parse(json_str);
-
-        // Validate required fields
-        if (!j.contains("lastUpdateId") || !j.contains("bids") || !j.contains("asks")) {
-            return Result<DepthSnapshot, std::string>::Err("Missing required fields in depth snapshot");
-        }
+    return guarded<DepthSnapshot>([&] {
+        auto doc = iterate(json_str);
+        ondemand::object obj = doc.get_object();
 
         DepthSnapshot snapshot;
-        snapshot.last_update_id = j["lastUpdateId"].get<SequenceId>();
-        snapshot.event_time = j.value("E", 0ULL);
+        snapshot.last_update_id = obj["lastUpdateId"].get_uint64();
+        std::uint64_t event_time{};
+        snapshot.event_time =
+            obj["E"].get_uint64().get(event_time) == simdjson::SUCCESS ? event_time : 0;
         snapshot.symbol = std::string(symbol);
-        snapshot.bids = parse_price_levels(j["bids"]);
-        snapshot.asks = parse_price_levels(j["asks"]);
+        snapshot.bids = parse_price_levels(obj["bids"].get_array());
+        snapshot.asks = parse_price_levels(obj["asks"].get_array());
+        return snapshot;
+    });
+}
 
-        return Result<DepthSnapshot, std::string>::Ok(std::move(snapshot));
+Result<StreamEvent, std::string> MessageParser::parse_stream_event(std::string_view json_str) {
+    return guarded<StreamEvent>([&]() -> StreamEvent {
+        auto doc = iterate(json_str);
+        ondemand::object obj = doc.get_object();
 
-    } catch (const json::exception& e) {
-        return Result<DepthSnapshot, std::string>::Err(
-            std::string("JSON parse error: ") + e.what()
-        );
-    } catch (const std::exception& e) {
-        return Result<DepthSnapshot, std::string>::Err(
-            std::string("Parse error: ") + e.what()
-        );
-    }
+        std::string_view stream = obj["stream"];
+        if (is_depth_stream(stream)) {
+            return depth_update_from(obj["data"].get_object());
+        }
+        if (is_agg_trade_stream(stream)) {
+            return agg_trade_from(obj["data"].get_object());
+        }
+        return std::monostate{};
+    });
 }
 
 Result<StreamMessage, std::string> MessageParser::parse_combined_stream(std::string_view json_str) {
-    try {
-        auto j = json::parse(json_str);
-
-        if (!j.contains("stream") || !j.contains("data")) {
-            return Result<StreamMessage, std::string>::Err("Missing stream or data field");
-        }
+    return guarded<StreamMessage>([&] {
+        auto doc = iterate(json_str);
+        ondemand::object obj = doc.get_object();
 
         StreamMessage msg;
-        msg.stream = j["stream"].get<std::string>();
-        msg.data = j["data"].dump();
-
-        return Result<StreamMessage, std::string>::Ok(std::move(msg));
-
-    } catch (const json::exception& e) {
-        return Result<StreamMessage, std::string>::Err(
-            std::string("JSON parse error: ") + e.what()
-        );
-    }
+        msg.stream = std::string(std::string_view(obj["stream"]));
+        msg.data = std::string(std::string_view(obj["data"].raw_json()));
+        return msg;
+    });
 }
 
 bool MessageParser::is_depth_stream(std::string_view stream_name) {

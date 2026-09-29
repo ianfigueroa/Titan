@@ -62,8 +62,8 @@ private:
     void fetch_snapshot();
     void on_snapshot_response(Result<std::string, std::string> result);
 
-    void process_depth_update(const DepthUpdate& update);
-    void process_agg_trade(const AggTrade& trade);
+    void process_depth_update(DepthUpdate update);
+    void process_agg_trade(AggTrade trade);
     void apply_snapshot(const DepthSnapshot& snapshot);
 
     void schedule_reconnect();
