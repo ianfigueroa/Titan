@@ -350,7 +350,7 @@ cmake --build build --target bench_spsc_throughput
 ./build/bench_spsc_throughput          # 500M events (default)
 ```
 
-On a Ryzen 9 8945HS with MinGW g++ 15.2 `-O3 -march=native`, with nothing else running (other load on the box knocks 20-25% off):
+On a Ryzen 9 8945HS with MinGW g++ 15.2, Release build (`-O3`), plugged in, with nothing else running (other load on the box knocks 20-25% off):
 
 ```
 SPSC hand-off: ~225 M events/s, ~4.4 ns/handoff
