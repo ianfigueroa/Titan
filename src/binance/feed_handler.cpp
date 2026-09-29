@@ -39,17 +39,25 @@ void FeedHandler::stop() {
     set_state(FeedState::Disconnected);
 
     reconnect_timer_.cancel();
-
-    if (ws_client_) {
-        ws_client_->close();
-        ws_client_.reset();
-    }
+    close_streams();
 }
 
 void FeedHandler::connect() {
     set_state(FeedState::Connecting);
 
-    ws_client_ = std::make_shared<network::WebSocketClient>(
+    depth_ws_ = make_stream([self = shared_from_this()]() {
+        self->on_ws_connected();
+    });
+    trade_ws_ = make_stream([]() {
+        spdlog::info("Trade stream connected");
+    });
+
+    depth_ws_->connect(config_.network.ws_host, config_.network.ws_port, config_.ws_depth_path());
+    trade_ws_->connect(config_.network.ws_host, config_.network.ws_port, config_.ws_trade_path());
+}
+
+std::shared_ptr<network::WebSocketClient> FeedHandler::make_stream(std::function<void()> on_connected) {
+    return std::make_shared<network::WebSocketClient>(
         ioc_,
         ssl_ctx_,
         [self = shared_from_this()](std::string_view msg) {
@@ -58,20 +66,20 @@ void FeedHandler::connect() {
         [self = shared_from_this()](auto ec, auto what) {
             self->on_ws_error(ec, what);
         },
-        [self = shared_from_this()]() {
-            self->on_ws_connected();
-        },
+        std::move(on_connected),
         [self = shared_from_this()]() {
             self->on_ws_disconnect();
         }
     );
+}
 
-    auto path = endpoints::ws_combined_path(config_.network.symbol);
-    ws_client_->connect(
-        config_.network.ws_host,
-        config_.network.ws_port,
-        path
-    );
+void FeedHandler::close_streams() {
+    for (auto* ws : {&depth_ws_, &trade_ws_}) {
+        if (*ws) {
+            (*ws)->close();
+            ws->reset();
+        }
+    }
 }
 
 void FeedHandler::on_ws_connected() {
@@ -88,7 +96,7 @@ void FeedHandler::on_ws_connected() {
 }
 
 void FeedHandler::on_ws_message(std::string_view message) {
-    // Wrapper and payload are parsed in a single pass
+    const auto received_at = std::chrono::steady_clock::now();
     auto result = MessageParser::parse_stream_event(message);
     if (result.is_err()) {
         spdlog::warn("Failed to parse stream message: {}", result.error());
@@ -97,13 +105,13 @@ void FeedHandler::on_ws_message(std::string_view message) {
 
     auto event = std::move(result).take_value();
     if (auto* update = std::get_if<DepthUpdate>(&event)) {
-        process_depth_update(std::move(*update));
+        process_depth_update(std::move(*update), received_at);
     } else if (auto* trade = std::get_if<AggTrade>(&event)) {
-        process_agg_trade(std::move(*trade));
+        process_agg_trade(std::move(*trade), received_at);
     }
 }
 
-void FeedHandler::process_depth_update(DepthUpdate update) {
+void FeedHandler::process_depth_update(DepthUpdate update, Timestamp received_at) {
     auto current_state = state_.load();
 
     if (current_state == FeedState::WaitingSnapshot) {
@@ -112,16 +120,21 @@ void FeedHandler::process_depth_update(DepthUpdate update) {
         buffered_updates_.push_back(std::move(update));
     } else if (current_state == FeedState::Live) {
         // Forward directly to engine
-        emit_message(DepthUpdateMsg{std::move(update), std::chrono::steady_clock::now()});
+        emit_message(DepthUpdateMsg{std::move(update), received_at});
     }
 }
 
-void FeedHandler::process_agg_trade(AggTrade trade) {
+void FeedHandler::process_agg_trade(AggTrade trade, Timestamp received_at) {
     // Trades are always forwarded immediately
-    emit_message(AggTradeMsg{std::move(trade), std::chrono::steady_clock::now()});
+    emit_message(AggTradeMsg{std::move(trade), received_at});
 }
 
 void FeedHandler::on_ws_error(boost::system::error_code ec, std::string_view what) {
+    auto state = state_.load();
+    if (state == FeedState::Reconnecting || state == FeedState::Disconnected) {
+        return;
+    }
+
     spdlog::error("WebSocket error in {}: {}", what, ec.message());
 
     emit_message(ConnectionLost{
@@ -133,8 +146,9 @@ void FeedHandler::on_ws_error(boost::system::error_code ec, std::string_view wha
 }
 
 void FeedHandler::on_ws_disconnect() {
-    if (state_.load() == FeedState::Disconnected) {
-        return;  // Intentional shutdown
+    auto state = state_.load();
+    if (state == FeedState::Disconnected || state == FeedState::Reconnecting) {
+        return;
     }
 
     spdlog::warn("WebSocket disconnected unexpectedly");
@@ -206,58 +220,22 @@ void FeedHandler::apply_snapshot(const DepthSnapshot& snapshot) {
 
     set_state(FeedState::Syncing);
 
-    // Send snapshot to engine
     emit_message(SnapshotMsg{snapshot, std::chrono::steady_clock::now()});
-
-    // Replay buffered updates that came after snapshot
-    // According to Binance: first update after snapshot must have
-    // U <= lastUpdateId+1 AND u >= lastUpdateId+1
-    bool found_first_valid = false;
-
-    for (const auto& update : buffered_updates_) {
-        if (!found_first_valid) {
-            // Looking for the bridging update
-            if (update.first_update_id <= snapshot.last_update_id + 1 &&
-                update.final_update_id >= snapshot.last_update_id + 1) {
-                found_first_valid = true;
-                spdlog::debug("Found bridging update U={} u={}",
-                             update.first_update_id, update.final_update_id);
-            } else if (update.final_update_id <= snapshot.last_update_id) {
-                // Update is older than snapshot, skip
-                continue;
-            } else {
-                // Gap detected - update is newer than expected
-                spdlog::warn("Sync gap: snapshot={} but first update U={}",
-                            snapshot.last_update_id, update.first_update_id);
-                // Request new snapshot
-                request_snapshot();
-                return;
-            }
-        }
-
-        if (found_first_valid) {
-            emit_message(DepthUpdateMsg{update, std::chrono::steady_clock::now()});
-        }
+    for (auto& update : buffered_updates_) {
+        emit_message(DepthUpdateMsg{std::move(update), std::chrono::steady_clock::now(), true});
     }
-
     buffered_updates_.clear();
-
-    if (!found_first_valid && !buffered_updates_.empty()) {
-        spdlog::warn("No bridging update found, requesting new snapshot");
-        request_snapshot();
-        return;
-    }
 
     set_state(FeedState::Live);
     spdlog::info("Feed handler is now Live");
 }
 
 void FeedHandler::schedule_reconnect() {
-    set_state(FeedState::Reconnecting);
-
-    if (ws_client_) {
-        ws_client_.reset();
+    if (state_.load() == FeedState::Reconnecting) {
+        return;
     }
+    set_state(FeedState::Reconnecting);
+    close_streams();
 
     auto delay = reconnect_strategy_.next_delay();
     spdlog::info("Reconnecting in {}ms (attempt {})",

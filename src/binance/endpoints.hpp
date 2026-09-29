@@ -17,18 +17,6 @@ constexpr std::string_view REST_HOST = "fapi.binance.com";
 /// Default port for HTTPS/WSS
 constexpr std::string_view PORT = "443";
 
-/// Build WebSocket path for combined streams
-/// @param symbol Lowercase symbol (e.g., "btcusdt")
-/// @return Path like "/stream?streams=btcusdt@depth@100ms/btcusdt@aggTrade"
-[[nodiscard]] inline std::string ws_combined_path(std::string_view symbol) {
-    std::string path = "/stream?streams=";
-    path += symbol;
-    path += "@depth@100ms/";
-    path += symbol;
-    path += "@aggTrade";
-    return path;
-}
-
 /// Build REST path for depth snapshot
 /// @param symbol Uppercase symbol (e.g., "BTCUSDT")
 /// @param limit Number of price levels (default 1000, max 1000)

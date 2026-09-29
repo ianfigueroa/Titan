@@ -54,6 +54,8 @@ public:
 
 private:
     void connect();
+    void close_streams();
+    std::shared_ptr<network::WebSocketClient> make_stream(std::function<void()> on_connected);
     void on_ws_connected();
     void on_ws_message(std::string_view message);
     void on_ws_error(boost::system::error_code ec, std::string_view what);
@@ -62,8 +64,8 @@ private:
     void fetch_snapshot();
     void on_snapshot_response(Result<std::string, std::string> result);
 
-    void process_depth_update(DepthUpdate update);
-    void process_agg_trade(AggTrade trade);
+    void process_depth_update(DepthUpdate update, Timestamp received_at);
+    void process_agg_trade(AggTrade trade, Timestamp received_at);
     void apply_snapshot(const DepthSnapshot& snapshot);
 
     void schedule_reconnect();
@@ -77,7 +79,8 @@ private:
     const Config& config_;
     MessageCallback on_message_;
 
-    std::shared_ptr<network::WebSocketClient> ws_client_;
+    std::shared_ptr<network::WebSocketClient> depth_ws_;
+    std::shared_ptr<network::WebSocketClient> trade_ws_;
     boost::asio::steady_timer reconnect_timer_;
     ReconnectStrategy reconnect_strategy_;
 
