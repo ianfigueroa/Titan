@@ -41,7 +41,7 @@ void pin_current_thread(int cpu) {
 #elif defined(__linux__)
     cpu_set_t set;
     CPU_ZERO(&set);
-    CPU_SET(cpu, &set);
+    CPU_SET(static_cast<std::size_t>(cpu), &set);
     if (pthread_setaffinity_np(pthread_self(), sizeof(set), &set) != 0) {
         spdlog::warn("Could not pin engine thread to cpu {}", cpu);
         return;
