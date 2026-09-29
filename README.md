@@ -33,7 +33,7 @@ What you get over connecting to Binance yourself:
 - VWAP, imbalance and spread in bps already computed
 - whale alerts when a trade is more than N standard deviations above the recent mean
 - an order book that detects sequence gaps and resyncs from a REST snapshot on its own
-- fixed-point prices, so no float drift in the money math
+- fixed-point book prices, so price levels always match exactly
 - one exchange connection shared by every client
 
 ## Installation
@@ -54,10 +54,10 @@ wget https://github.com/ianfigueroa/Titan/releases/latest/download/titan-linux-x
 chmod +x titan-linux-x64
 ./titan-linux-x64
 
-# macOS
-wget https://github.com/ianfigueroa/Titan/releases/latest/download/titan-macos-x64
-chmod +x titan-macos-x64
-./titan-macos-x64
+# macOS (Apple Silicon)
+wget https://github.com/ianfigueroa/Titan/releases/latest/download/titan-macos-arm64
+chmod +x titan-macos-arm64
+./titan-macos-arm64
 ```
 
 ### Option 3: Build from Source
@@ -124,7 +124,7 @@ See the `examples/` folder for complete working examples in Python, Node.js, and
 
 ## WebSocket API
 
-Titan streams two types of messages:
+Titan streams three types of messages:
 
 ### Metrics (every 500ms)
 
@@ -167,11 +167,22 @@ Titan streams two types of messages:
   "side": "BUY",
   "price": 67559.30,
   "quantity": 0.318,
-  "sigma": 2.3
+  "deviation": 2.3
 }
 ```
 
-Alerts trigger when a trade size exceeds the configured sigma threshold (default: 2.0 standard deviations above mean).
+Alerts trigger when a trade size is more than the configured number of standard deviations above the recent mean (default 2.0). `deviation` is how many it was.
+
+### Status (on connect and disconnect)
+
+```json
+{
+  "type": "status",
+  "timestamp": "2025-02-18T20:38:40.000Z",
+  "connected": true,
+  "state": "connected"
+}
+```
 
 ## Configuration
 
@@ -250,8 +261,8 @@ services:
 
 ```
 ┌─────────────────┐     ┌─────────────────┐
-│  Binance WS     │────▶│  FeedHandler    │
-│  (depth+trade)  │     │  (parse/sync)   │
+│  Binance WS x2  │────▶│  FeedHandler    │
+│ (depth, trades) │     │  (parse/sync)   │
 └─────────────────┘     └────────┬────────┘
                                  │
                                  ▼
@@ -345,7 +356,7 @@ On a Ryzen 9 8945HS with MinGW g++ 15.2 `-O3 -march=native`, with nothing else r
 SPSC hand-off: ~225 M events/s, ~4.4 ns/handoff
 ```
 
-That is the queue hand-off on its own, not end-to-end throughput, and it depends on the CPU.
+That is the queue hand-off on its own, not end-to-end throughput, and it depends on the CPU. On battery the same run gives ~150-180 M/s.
 
 `bench_ingest_replay` pushes 300 recorded binance depth messages (`benchmarks/data`, ~200 levels each) through parse, the queue and the book, same as the live feed minus the socket. Run it from the repo root:
 
@@ -379,9 +390,9 @@ A 1 ms sleep on Windows actually waits for the next timer tick (15.6 ms by defau
 
 ## When something looks off
 
-- "Requesting snapshot" over and over means the depth stream has sequence gaps. That is normal for a few seconds during a burst; if it never stops, your latency to Binance is the problem.
+- "Sequence gap" followed by "Snapshot requested" means an update was missed and the book is being rebuilt. Once in a while is normal; if it never stops, your connection to Binance is the problem.
 - If Binance refuses the connection, it is usually a region block. The symbol has to be the Futures spelling (`btcusdt`, not `btc-usdt`).
-- CPU goes up with market activity. If you do not need the full book, lower `depth_limit`. Make sure it is a release build.
+- One core sits at 100% because the engine thread busy-polls. Set `TITAN_BUSY_POLL=0` if you'd rather save CPU than latency. Make sure it is a release build.
 - Memory grows with the number of connected clients because each one gets its own send queue. Drop idle clients.
 
 ## License

@@ -19,9 +19,9 @@ Titan is a real-time market data infrastructure designed for low-latency process
 ┌─────────────────────┐       SPSC Queue      ┌─────────────────────┐
 │   NETWORK THREAD    │ ───────────────────►  │   ENGINE THREAD     │
 │   (main thread)     │      EngineMessage    │                     │
-│                     │                        │ - Poll queue        │
+│                     │                        │ - Busy-poll queue   │
 │ - io_context.run()  │                        │ - Update order book │
-│ - WebSocket client  │                        │ - Process trades    │
+│ - 2 WS clients      │                        │ - Process trades    │
 │ - REST client       │                        │ - Calculate metrics │
 │ - Feed handler      │                        │ - Console output    │
 │ - Shared SSL ctx    │                        │ - WS broadcast      │
@@ -61,8 +61,8 @@ Titan is a real-time market data infrastructure designed for low-latency process
          │                            ▼                              ▼
          │                     ┌────────────┐              ┌─────────────────┐
          │                     │Reconnecting│◄─────────────│     Syncing     │
-         │                     └────────────┘    gap       └─────────────────┘
-         │                            │       detected            │
+         │                     └────────────┘  snapshot    └─────────────────┘
+         │                            │        failed             │
          │                  backoff + │                    synced │
          │                  jitter    │                           │
          │                            ▼                           ▼
@@ -77,12 +77,14 @@ Titan is a real-time market data infrastructure designed for low-latency process
                                                          └────────────┘
 ```
 
+A gap while Live doesn't reconnect: the feed goes back to WaitingSnapshot on the same connection and fetches a new snapshot.
+
 ## Data Flow
 
 ### 1. Market Data Ingestion
 
 ```
-Binance WS ──► WebSocketClient ──► FeedHandler ──► SPSC Queue ──► Engine
+Binance WS x2 ──► WebSocketClient ──► FeedHandler ──► SPSC Queue ──► Engine
                     │
                     └──► REST Client (snapshots)
 ```
@@ -124,6 +126,7 @@ using EngineMessage = std::variant<
 | `status.hpp` | Result<T,E> monad for error handling |
 | `config.hpp` | Immutable configuration |
 | `messages.hpp` | Unified EngineMessage variant |
+| `latency_stats.hpp` | Rolling p50/p99 latency window |
 
 ### Network Layer (`src/network/`)
 
@@ -142,15 +145,16 @@ using EngineMessage = std::variant<
 | `feed_state.hpp` | Feed state machine enum |
 | `message_parser.hpp` | JSON → typed structs |
 | `feed_handler.hpp` | Connection orchestration |
+| `depth_sequencer.hpp` | Futures book sync rules (stale / apply / gap) |
 | `endpoints.hpp` | API URLs |
 
 ### Order Book (`src/orderbook/`)
 
 | File | Purpose |
 |------|---------|
-| `order_book.hpp` | Core engine with sync logic |
+| `order_book.hpp` | Bid/ask sides, best prices, imbalance |
 | `snapshot.hpp` | Immutable book state |
-| `price_level.hpp` | Bid/ask side type definitions |
+| `price_level.hpp` | Sorted-vector book side |
 | `book_metrics.hpp` | Additional metrics calculations |
 
 ### Trade Flow (`src/trade/`)
@@ -236,7 +240,7 @@ The SPSC queue holds 65536 messages. The network thread never waits on it: if `t
 A dropped depth update leaves a gap in the update IDs, so the next update fails the sequence check and the engine requests a fresh snapshot and rebuilds the book.
 
 **Monitoring queue health:**
-- Watch for "Requesting snapshot" messages in logs
+- Watch for "Queue full" and "Sequence gap" messages in logs
 - High frequency indicates engine thread can't keep up
 - Solutions: reduce output frequency, optimize consumer, or increase queue size
 

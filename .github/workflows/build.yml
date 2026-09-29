@@ -67,7 +67,7 @@ jobs:
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: titan-macos-x64
+          name: titan-macos-arm64
           path: build/titan
 
   docker:
@@ -110,12 +110,12 @@ jobs:
       - name: Rename binaries
         run: |
           mv titan-linux-x64/titan titan-linux-x64/titan-linux-x64
-          mv titan-macos-x64/titan titan-macos-x64/titan-macos-x64
+          mv titan-macos-arm64/titan titan-macos-arm64/titan-macos-arm64
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             titan-linux-x64/titan-linux-x64
-            titan-macos-x64/titan-macos-x64
+            titan-macos-arm64/titan-macos-arm64
           generate_release_notes: true

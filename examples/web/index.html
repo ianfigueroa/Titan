@@ -431,7 +431,7 @@
 
       const sigmaEl = document.createElement('span');
       sigmaEl.className = 'alert-sigma';
-      sigmaEl.textContent = (data.sigma || 0).toFixed(1) + '\u03C3';
+      sigmaEl.textContent = (data.deviation || 0).toFixed(1) + '\u03C3';
 
       alertEl.appendChild(sideEl);
       alertEl.appendChild(detailsEl);

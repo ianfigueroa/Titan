@@ -51,7 +51,7 @@ ws.on('message', (data) => {
       console.log(
         `WHALE ${msg.side || '?'}: ` +
         `${msg.quantity || 0} @ ${(msg.price || 0).toFixed(2)} ` +
-        `(${(msg.sigma || 0).toFixed(1)} sigma)`
+        `(${(msg.deviation || 0).toFixed(1)} sigma)`
       );
     }
   } catch (e) {

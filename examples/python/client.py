@@ -52,7 +52,7 @@ async def main(host: str, port: int) -> None:
                     print(
                         f"WHALE {data.get('side', '?')}: "
                         f"{data.get('quantity', 0)} @ {data.get('price', 0):.2f} "
-                        f"({data.get('sigma', 0):.1f} sigma)"
+                        f"({data.get('deviation', 0):.1f} sigma)"
                     )
     except ConnectionRefusedError:
         print(f"Error: Could not connect to {uri}")
