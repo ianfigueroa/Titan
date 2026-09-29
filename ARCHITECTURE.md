@@ -91,12 +91,14 @@ Binance WS ──► WebSocketClient ──► FeedHandler ──► SPSC Queue 
 
 Following [Binance's depth stream protocol](https://binance-docs.github.io/apidocs/futures/en/#diff-book-depth-streams):
 
-1. Connect to WebSocket, start buffering depth updates
-2. Fetch REST snapshot with `lastUpdateId = U`
-3. Drop buffered updates where `final_update_id <= U`
-4. First processed update must satisfy: `first_update_id <= U+1 AND final_update_id >= U+1`
-5. Subsequent updates: `prev_final_update_id == last_processed_id`
+1. Connect to the depth stream (`/public/stream`) and start buffering updates. Trades come in on a second connection (`/market/stream`).
+2. Fetch REST snapshot with `lastUpdateId = L`
+3. Drop updates where `final_update_id < L`
+4. First applied update must satisfy: `first_update_id <= L <= final_update_id`
+5. Subsequent updates: `prev_final_update_id == previous final_update_id`
 6. On gap: clear book, request new snapshot, repeat
+
+Steps 3-5 are in `DepthSequencer`. Futures update ids aren't contiguous, so `pu` is the continuity check. On a gap the engine posts the snapshot request to the network thread, so the feed handler only runs on its own thread.
 
 ### 3. Message Types
 
@@ -221,10 +223,11 @@ current_delay *= multiplier
 
 ## Performance Considerations
 
-1. **O(1) BBO Access**: Cached iterators for best bid/ask
+1. **Flat book sides**: sorted vectors with the best price at the back, O(1) best bid/ask
 2. **Moves, not copies**: messages are moved through the queue
-3. **Cache Line Padding**: SPSC queue head/tail on separate cache lines
-4. **Async Logging**: spdlog never blocks engine thread
+3. **Busy-poll engine thread**: spins on the queue instead of sleeping (`engine.busy_poll`), can be pinned to a core (`engine.cpu`)
+4. **Cache Line Padding**: SPSC queue head/tail on separate cache lines
+5. **Async Logging**: spdlog never blocks engine thread
 
 ## Queue Overflow Behavior
 
@@ -278,4 +281,3 @@ services:
 - [ ] Multiple symbol support (single instance)
 - [ ] Prometheus metrics endpoint
 - [ ] Feed recording/replay
-- [ ] Consider `boost::flat_map` for high-frequency updates

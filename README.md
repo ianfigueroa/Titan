@@ -198,6 +198,8 @@ TITAN_WS_SERVER_PORT=9002 ./titan
 | `TITAN_VWAP_WINDOW` | `100` | Trades in VWAP calculation |
 | `TITAN_LARGE_TRADE_STD_DEVS` | `2.0` | Sigma threshold for alerts |
 | `TITAN_CONSOLE_INTERVAL_MS` | `500` | Console output interval |
+| `TITAN_BUSY_POLL` | `1` | Engine thread spins instead of sleeping (uses a full core) |
+| `TITAN_ENGINE_CPU` | `-1` | Pin the engine thread to this core |
 
 ### Config File
 
@@ -211,7 +213,9 @@ TITAN_WS_SERVER_PORT=9002 ./titan
   "engine": {
     "vwap_window": 100,
     "large_trade_std_devs": 2.0,
-    "depth_limit": 1000
+    "depth_limit": 1000,
+    "busy_poll": true,
+    "cpu": -1
   },
   "output": {
     "console_interval_ms": 500,
@@ -353,12 +357,25 @@ cmake --build build --target bench_ingest_replay
 Same laptop, `-O3`:
 
 ```
-                          parse only      parse -> queue -> book
-nlohmann, 2 passes        ~2.7K msgs/s    ~2.3K msgs/s
-simdjson, 1 pass          ~80K msgs/s     ~51K msgs/s
+                               parse only      parse -> queue -> book
+nlohmann, 2 passes, std::map   ~2.7K msgs/s    ~2.3K msgs/s
+simdjson, 1 pass, std::map     ~80K msgs/s     ~51K msgs/s
+simdjson, 1 pass, flat book    ~80K msgs/s     ~31K msgs/s
 ```
 
-The old code parsed the stream wrapper, dumped `data` back to a string, parsed it again and ran `std::stod` on every quantity. The live stream is only ~10 msgs/s so this is headroom, not the live rate. `benchmarks/record_feed.py` grabs a new sample.
+The flat book loses here because the replay keeps everything in cache. Live, at ~10 msgs/s, the cache is cold between messages and it wins (~42 us vs ~78 us to apply an update). `benchmarks/record_feed.py` grabs a new sample.
+
+### Latency
+
+Every 10 s the engine logs receive-to-book latency (message in, before parsing, to book updated). Live against binance on the same laptop, three one-minute runs:
+
+```
+                          p50        p99
+sleep 1 ms (old loop)     ~7.8 ms    ~15.6 ms
+busy poll + flat book     60-90 us   0.4-1 ms
+```
+
+A 1 ms sleep on Windows actually waits for the next timer tick (15.6 ms by default), that was most of it. This doesn't count the network or binance's 100 ms batching, which are way bigger.
 
 ## When something looks off
 
