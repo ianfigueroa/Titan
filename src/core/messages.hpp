@@ -12,6 +12,7 @@ namespace titan {
 struct DepthUpdateMsg {
     binance::DepthUpdate data;
     Timestamp received_at;
+    bool replayed{false};
 };
 
 /// Aggregated trade message with receive timestamp

@@ -31,6 +31,8 @@ TEST_F(ConfigTest, DefaultsAreReasonable) {
     EXPECT_EQ(config.network.ws_port, "443");
     EXPECT_EQ(config.network.symbol, "btcusdt");
     EXPECT_EQ(config.engine.vwap_window, 100u);
+    EXPECT_TRUE(config.engine.busy_poll);
+    EXPECT_EQ(config.engine.cpu, -1);
     EXPECT_EQ(config.output.ws_server_port, 9001);
 }
 
@@ -102,7 +104,9 @@ TEST_F(ConfigTest, LoadFromFileAllFields) {
             "queue_capacity": 32768,
             "vwap_window": 200,
             "large_trade_std_devs": 3.0,
-            "depth_limit": 500
+            "depth_limit": 500,
+            "busy_poll": false,
+            "cpu": 3
         },
         "output": {
             "console_interval_ms": 1000,
@@ -132,6 +136,8 @@ TEST_F(ConfigTest, LoadFromFileAllFields) {
     EXPECT_EQ(config.engine.vwap_window, 200u);
     EXPECT_DOUBLE_EQ(config.engine.large_trade_std_devs, 3.0);
     EXPECT_EQ(config.engine.depth_limit, 500u);
+    EXPECT_FALSE(config.engine.busy_poll);
+    EXPECT_EQ(config.engine.cpu, 3);
 
     // Output
     EXPECT_EQ(config.output.console_interval.count(), 1000);
@@ -156,13 +162,12 @@ TEST_F(ConfigTest, LoadWithPathLoadsFile) {
     EXPECT_EQ(config.network.symbol, "xrpusdt");
 }
 
-TEST_F(ConfigTest, WsStreamPathBuildsCorrectly) {
+TEST_F(ConfigTest, WsStreamPathsBuildCorrectly) {
     auto config = Config::defaults();
     config.network.symbol = "ethusdt";
 
-    auto path = config.ws_stream_path();
-
-    EXPECT_EQ(path, "/stream?streams=ethusdt@depth@100ms/ethusdt@aggTrade");
+    EXPECT_EQ(config.ws_depth_path(), "/public/stream?streams=ethusdt@depth@100ms");
+    EXPECT_EQ(config.ws_trade_path(), "/market/stream?streams=ethusdt@aggTrade");
 }
 
 TEST_F(ConfigTest, RestDepthPathBuildsCorrectly) {

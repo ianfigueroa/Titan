@@ -31,6 +31,8 @@ struct Config {
         std::size_t vwap_window = 100;
         double large_trade_std_devs = 2.0;
         std::size_t depth_limit = 1000;  // REST snapshot depth
+        bool busy_poll = true;
+        int cpu = -1;  // -1 = don't pin
     };
 
     /// Output configuration
@@ -61,10 +63,14 @@ struct Config {
     /// @return Loaded configuration
     [[nodiscard]] static Config load(const std::optional<std::string>& config_path = std::nullopt);
 
-    /// Build WebSocket path for combined streams
-    [[nodiscard]] std::string ws_stream_path() const {
-        return "/stream?streams=" + network.symbol + "@depth@100ms/" +
-               network.symbol + "@aggTrade";
+    /// Build WebSocket path for depth updates
+    [[nodiscard]] std::string ws_depth_path() const {
+        return "/public/stream?streams=" + network.symbol + "@depth@100ms";
+    }
+
+    /// Build WebSocket path for aggregated trades
+    [[nodiscard]] std::string ws_trade_path() const {
+        return "/market/stream?streams=" + network.symbol + "@aggTrade";
     }
 
     /// Build REST depth snapshot path

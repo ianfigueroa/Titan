@@ -1,17 +1,74 @@
 #include "engine/market_data_engine.hpp"
 #include "network/ssl_context.hpp"
 #include "output/json_formatter.hpp"
+#include <boost/asio/post.hpp>
 #include <spdlog/async.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#elif defined(__linux__)
+#include <pthread.h>
+#include <sched.h>
+#endif
+
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+#include <immintrin.h>
+#endif
+
 namespace titan {
+
+namespace {
+
+inline void cpu_relax() noexcept {
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+    _mm_pause();
+#elif defined(__aarch64__)
+    asm volatile("yield");
+#endif
+}
+
+void pin_current_thread(int cpu) {
+#if defined(_WIN32)
+    if (SetThreadAffinityMask(GetCurrentThread(), DWORD_PTR{1} << cpu) == 0) {
+        spdlog::warn("Could not pin engine thread to cpu {}", cpu);
+        return;
+    }
+#elif defined(__linux__)
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    CPU_SET(cpu, &set);
+    if (pthread_setaffinity_np(pthread_self(), sizeof(set), &set) != 0) {
+        spdlog::warn("Could not pin engine thread to cpu {}", cpu);
+        return;
+    }
+#else
+    spdlog::warn("CPU pinning is not supported on this platform");
+    return;
+#endif
+    spdlog::info("Engine thread pinned to cpu {}", cpu);
+}
+
+constexpr auto kIdleTickInterval = std::chrono::milliseconds(10);
+constexpr auto kLatencyReportInterval = std::chrono::seconds(10);
+
+std::string format_us(std::chrono::nanoseconds ns) {
+    return fmt::format("{:.1f}us", static_cast<double>(ns.count()) / 1000.0);
+}
+
+}  // namespace
 
 MarketDataEngine::MarketDataEngine(const Config& config)
     : config_(config)
     , ssl_ctx_(network::create_ssl_context())
     , order_book_(config.output.imbalance_levels)
     , trade_flow_(config.engine)
+    , last_idle_tick_(std::chrono::steady_clock::now())
+    , last_latency_report_(std::chrono::steady_clock::now())
     , last_metrics_output_(std::chrono::steady_clock::now())
 {
     setup_logging();
@@ -115,23 +172,53 @@ void MarketDataEngine::network_thread_func() {
 void MarketDataEngine::engine_thread_func() {
     spdlog::debug("Engine thread started");
 
-    while (!shutdown_requested_.load()) {
-        // Poll for messages
+    if (config_.engine.cpu >= 0) {
+        pin_current_thread(config_.engine.cpu);
+    }
+
+    while (!shutdown_requested_.load(std::memory_order_relaxed)) {
         if (auto msg = queue_.try_pop()) {
             process_message(*msg);
 
-            // Check for shutdown message
             if (std::holds_alternative<Shutdown>(*msg)) {
                 break;
             }
+            continue;
+        }
+
+        on_idle();
+        if (config_.engine.busy_poll) {
+            cpu_relax();
         } else {
-            // No message, do periodic tasks
-            output_metrics();
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
 
+    report_latency();
     spdlog::debug("Engine thread stopped");
+}
+
+void MarketDataEngine::on_idle() {
+    auto now = std::chrono::steady_clock::now();
+    if (now - last_idle_tick_ < kIdleTickInterval) {
+        return;
+    }
+    last_idle_tick_ = now;
+
+    output_metrics();
+    if (now - last_latency_report_ >= kLatencyReportInterval) {
+        last_latency_report_ = now;
+        report_latency();
+    }
+}
+
+void MarketDataEngine::report_latency() {
+    auto s = latency_.summary();
+    if (s.count == 0) {
+        return;
+    }
+    spdlog::info("Latency recv->book (last {} of {} updates): p50 {} p99 {} max {}",
+                 s.count, latency_.total(), format_us(s.p50), format_us(s.p99), format_us(s.max));
 }
 
 void MarketDataEngine::process_message(const EngineMessage& message) {
@@ -163,38 +250,38 @@ void MarketDataEngine::handle_depth_update(const DepthUpdateMsg& msg) {
 
     const auto& update = msg.data;
 
-    // Skip gap check for first few updates after snapshot
-    // The feed handler already validates the initial sync
-    if (updates_since_snapshot_ < 3) {
-        ++updates_since_snapshot_;
-    } else if (last_processed_id_ > 0) {
-        // Check sequence: prev_final_update_id should match our last processed
-        if (update.prev_final_update_id != last_processed_id_) {
-            spdlog::warn("Sequence gap detected: expected {}, got prev={}",
-                        last_processed_id_, update.prev_final_update_id);
-
+    switch (sequencer_.check(update)) {
+        case binance::DepthSequencer::Verdict::Stale:
+            return;
+        case binance::DepthSequencer::Verdict::Gap:
+            spdlog::warn("Sequence gap: last u={}, got U={} pu={}",
+                         sequencer_.last_id(), update.first_update_id,
+                         update.prev_final_update_id);
             sync_state_ = SyncState::WaitingSnapshot;
             order_book_.clear();
-            updates_since_snapshot_ = 0;
-            feed_handler_->request_snapshot();
+            request_resync();
             return;
-        }
+        case binance::DepthSequencer::Verdict::Apply:
+            break;
     }
 
     (void)order_book_.apply_update(update);
-    last_processed_id_ = update.final_update_id;
+
+    if (!msg.replayed) {
+        latency_.record(std::chrono::steady_clock::now() - msg.received_at);
+    }
 }
 
 void MarketDataEngine::handle_agg_trade(const AggTradeMsg& msg) {
     auto metrics = trade_flow_.process_trade(msg.data);
 
     // Check for new alert
-    if (metrics.last_alert.has_value()) {
-        pending_alert_ = metrics.last_alert;
-        console_->log_alert(*metrics.last_alert);
+    if (metrics.new_alert.has_value()) {
+        pending_alert_ = metrics.new_alert;
+        console_->log_alert(*metrics.new_alert);
 
         // Broadcast alert to WebSocket clients
-        ws_server_->broadcast(output::JsonFormatter::format_alert(*metrics.last_alert));
+        ws_server_->broadcast(output::JsonFormatter::format_alert(*metrics.new_alert));
     }
 }
 
@@ -202,8 +289,7 @@ void MarketDataEngine::handle_snapshot(const SnapshotMsg& msg) {
     spdlog::info("Applying snapshot, lastUpdateId={}", msg.data.last_update_id);
 
     (void)order_book_.apply_snapshot(msg.data);
-    last_processed_id_ = msg.data.last_update_id;
-    updates_since_snapshot_ = 0;
+    sequencer_.reset(msg.data.last_update_id);
     sync_state_ = SyncState::Synced;
 
     console_->log_sync_status("Synchronized");
@@ -232,8 +318,16 @@ void MarketDataEngine::handle_sequence_gap(const SequenceGap& msg) {
 
     sync_state_ = SyncState::WaitingSnapshot;
     order_book_.clear();
-    updates_since_snapshot_ = 0;
-    feed_handler_->request_snapshot();
+    request_resync();
+}
+
+// feed_handler_ belongs to the network thread
+void MarketDataEngine::request_resync() {
+    boost::asio::post(network_ioc_, [this]() {
+        if (feed_handler_) {
+            feed_handler_->request_snapshot();
+        }
+    });
 }
 
 void MarketDataEngine::output_metrics() {

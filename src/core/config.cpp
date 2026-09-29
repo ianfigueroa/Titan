@@ -133,6 +133,12 @@ void apply_env_overrides(Config& config) {
     if (auto v = get_env_size("TITAN_DEPTH_LIMIT", 5000)) {
         config.engine.depth_limit = *v;
     }
+    if (auto v = get_env_int("TITAN_BUSY_POLL", 0, 1)) {
+        config.engine.busy_poll = (*v == 1);
+    }
+    if (auto v = get_env_int("TITAN_ENGINE_CPU", -1, 1023)) {
+        config.engine.cpu = *v;
+    }
 
     // Output overrides with validation
     if (auto v = get_env_int("TITAN_CONSOLE_INTERVAL_MS", 100, 60000)) {
@@ -222,6 +228,12 @@ Result<Config, std::string> Config::load_from_file(const std::string& path) {
             }
             if (eng.contains("depth_limit")) {
                 config.engine.depth_limit = eng["depth_limit"].get<std::size_t>();
+            }
+            if (eng.contains("busy_poll")) {
+                config.engine.busy_poll = eng["busy_poll"].get<bool>();
+            }
+            if (eng.contains("cpu")) {
+                config.engine.cpu = eng["cpu"].get<int>();
             }
         }
 

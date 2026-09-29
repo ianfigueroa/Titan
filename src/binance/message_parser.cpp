@@ -9,9 +9,7 @@ namespace ondemand = simdjson::ondemand;
 
 namespace {
 
-/// simdjson reads up to SIMDJSON_PADDING bytes past the end of the input, so
-/// each message is copied into a per-thread buffer that keeps that slack.
-/// The parser is reused too, so steady state does no allocation here.
+// simdjson reads up to SIMDJSON_PADDING bytes past the end of the input
 ondemand::document iterate(std::string_view json) {
     thread_local ondemand::parser parser;
     thread_local std::string buffer;
@@ -30,8 +28,6 @@ double parse_double(std::string_view s) {
     return value;
 }
 
-/// Parse price level array: [["price", "quantity"], ...]
-/// FixedPrice::parse for exact map keys, from_chars for quantity
 std::vector<PriceLevel> parse_price_levels(ondemand::array arr) {
     std::vector<PriceLevel> levels;
 
@@ -57,9 +53,6 @@ std::vector<PriceLevel> parse_price_levels(ondemand::array arr) {
 
     return levels;
 }
-
-// Fields are looked up in the order Binance sends them, which is the fast
-// path for simdjson's forward-only object iteration.
 
 DepthUpdate depth_update_from(ondemand::object obj) {
     DepthUpdate update;

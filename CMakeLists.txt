@@ -134,6 +134,8 @@ if(TITAN_BUILD_TESTS)
         tests/unit/test_status.cpp
         tests/unit/test_config.cpp
         tests/unit/test_fixed_point.cpp
+        tests/unit/test_depth_sequencer.cpp
+        tests/unit/test_latency_stats.cpp
         tests/unit/test_book_side.cpp
     )
 

@@ -1,7 +1,9 @@
 #pragma once
 
+#include "binance/depth_sequencer.hpp"
 #include "binance/feed_handler.hpp"
 #include "core/config.hpp"
+#include "core/latency_stats.hpp"
 #include "core/messages.hpp"
 #include "orderbook/order_book.hpp"
 #include "output/console_logger.hpp"
@@ -50,6 +52,9 @@ private:
     void handle_connection_restored(const ConnectionRestored& msg);
     void handle_sequence_gap(const SequenceGap& msg);
 
+    void request_resync();
+    void on_idle();
+    void report_latency();
     void output_metrics();
     void broadcast_metrics();
 
@@ -78,8 +83,10 @@ private:
         Synced
     };
     SyncState sync_state_{SyncState::Initializing};
-    SequenceId last_processed_id_{0};
-    std::size_t updates_since_snapshot_{0};
+    binance::DepthSequencer sequencer_;
+    LatencyStats latency_;
+    std::chrono::steady_clock::time_point last_idle_tick_;
+    std::chrono::steady_clock::time_point last_latency_report_;
 
     // Threading
     std::thread network_thread_;

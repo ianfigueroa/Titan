@@ -8,7 +8,6 @@
 
 namespace titan::binance {
 
-/// Payload of one combined-stream message. monostate = a stream we don't handle.
 using StreamEvent = std::variant<std::monostate, DepthUpdate, AggTrade>;
 
 /// Parser for Binance WebSocket and REST API messages
@@ -27,7 +26,7 @@ public:
     [[nodiscard]] static Result<DepthSnapshot, std::string>
     parse_depth_snapshot(std::string_view json, std::string_view symbol);
 
-    /// Parse a combined stream message and its payload in one pass (hot path)
+    /// Parse a combined stream message and its payload in one pass
     [[nodiscard]] static Result<StreamEvent, std::string>
     parse_stream_event(std::string_view json);
 
