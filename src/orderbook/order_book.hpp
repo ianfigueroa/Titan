@@ -8,7 +8,7 @@
 namespace titan {
 
 /// Local order book engine
-/// Maintains bid/ask sides with cached best iterators for O(1) BBO access
+/// Maintains sorted bid/ask sides with O(1) best bid/ask access
 class OrderBook {
 public:
     /// Create an order book
@@ -46,11 +46,6 @@ public:
     [[nodiscard]] std::size_t ask_levels() const noexcept;
 
 private:
-    void apply_bid_update(FixedPrice price, Quantity qty);
-    void apply_ask_update(FixedPrice price, Quantity qty);
-    void invalidate_best_cache();
-    void update_best_bid_cache() const;
-    void update_best_ask_cache() const;
     [[nodiscard]] double calculate_imbalance() const;
     [[nodiscard]] BookSnapshot build_snapshot() const;
 
@@ -58,12 +53,6 @@ private:
     AskSide asks_;
     SequenceId last_update_id_{0};
     std::size_t imbalance_levels_;
-
-    // Cached best iterators (mutable for const snapshot())
-    mutable BidSide::const_iterator best_bid_it_;
-    mutable AskSide::const_iterator best_ask_it_;
-    mutable bool best_bid_valid_{false};
-    mutable bool best_ask_valid_{false};
 };
 
 }  // namespace titan

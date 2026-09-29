@@ -9,95 +9,25 @@ OrderBook::OrderBook(std::size_t imbalance_levels)
 {}
 
 BookSnapshot OrderBook::apply_snapshot(const binance::DepthSnapshot& snapshot) {
-    bids_.clear();
-    asks_.clear();
-    invalidate_best_cache();
-
-    // price is a FixedPrice (exact map key); qty stays double
-    for (const auto& [price, qty] : snapshot.bids) {
-        if (qty > 0.0) {
-            bids_[price] = qty;
-        }
-    }
-
-    for (const auto& [price, qty] : snapshot.asks) {
-        if (qty > 0.0) {
-            asks_[price] = qty;
-        }
-    }
-
+    bids_.assign(snapshot.bids);
+    asks_.assign(snapshot.asks);
     last_update_id_ = snapshot.last_update_id;
 
     return build_snapshot();
 }
 
 BookSnapshot OrderBook::apply_update(const binance::DepthUpdate& update) {
-    // Apply bid updates
     for (const auto& [price, qty] : update.bids) {
-        apply_bid_update(price, qty);
+        bids_.set(price, qty);
     }
 
-    // Apply ask updates
     for (const auto& [price, qty] : update.asks) {
-        apply_ask_update(price, qty);
+        asks_.set(price, qty);
     }
 
     last_update_id_ = update.final_update_id;
 
     return build_snapshot();
-}
-
-void OrderBook::apply_bid_update(FixedPrice price, Quantity qty) {
-    if (qty > 0.0) {
-        bids_[price] = qty;
-    } else {
-        auto it = bids_.find(price);
-        if (it != bids_.end()) {
-            // Check if we're removing the best bid
-            if (best_bid_valid_ && it == best_bid_it_) {
-                best_bid_valid_ = false;
-            }
-            bids_.erase(it);
-        }
-    }
-    // Invalidate cache if a better price might have been added
-    best_bid_valid_ = false;
-}
-
-void OrderBook::apply_ask_update(FixedPrice price, Quantity qty) {
-    if (qty > 0.0) {
-        asks_[price] = qty;
-    } else {
-        auto it = asks_.find(price);
-        if (it != asks_.end()) {
-            // Check if we're removing the best ask
-            if (best_ask_valid_ && it == best_ask_it_) {
-                best_ask_valid_ = false;
-            }
-            asks_.erase(it);
-        }
-    }
-    // Invalidate cache if a better price might have been added
-    best_ask_valid_ = false;
-}
-
-void OrderBook::invalidate_best_cache() {
-    best_bid_valid_ = false;
-    best_ask_valid_ = false;
-}
-
-void OrderBook::update_best_bid_cache() const {
-    if (!best_bid_valid_) {
-        best_bid_it_ = bids_.begin();
-        best_bid_valid_ = true;
-    }
-}
-
-void OrderBook::update_best_ask_cache() const {
-    if (!best_ask_valid_) {
-        best_ask_it_ = asks_.begin();
-        best_ask_valid_ = true;
-    }
 }
 
 double OrderBook::calculate_imbalance() const {
@@ -110,12 +40,12 @@ double OrderBook::calculate_imbalance() const {
 
     // Sum top N levels
     std::size_t count = 0;
-    for (auto it = bids_.begin(); it != bids_.end() && count < imbalance_levels_; ++it, ++count) {
+    for (auto it = bids_.best_first(); it != bids_.best_first_end() && count < imbalance_levels_; ++it, ++count) {
         bid_volume += it->second;
     }
 
     count = 0;
-    for (auto it = asks_.begin(); it != asks_.end() && count < imbalance_levels_; ++it, ++count) {
+    for (auto it = asks_.best_first(); it != asks_.best_first_end() && count < imbalance_levels_; ++it, ++count) {
         ask_volume += it->second;
     }
 
@@ -133,40 +63,23 @@ BookSnapshot OrderBook::build_snapshot() const {
     snap.last_update_id = last_update_id_;
     snap.timestamp = std::chrono::steady_clock::now();
 
-    if (bids_.empty() || asks_.empty()) {
-        // Return default values for empty book
-        if (!bids_.empty()) {
-            update_best_bid_cache();
-            // Convert FixedPrice to double for display
-            snap.best_bid = best_bid_it_->first.to_double();
-            snap.best_bid_qty = best_bid_it_->second;
-        }
-        if (!asks_.empty()) {
-            update_best_ask_cache();
-            // Convert FixedPrice to double for display
-            snap.best_ask = best_ask_it_->first.to_double();
-            snap.best_ask_qty = best_ask_it_->second;
-        }
-        snap.imbalance = calculate_imbalance();
-        return snap;
+    if (!bids_.empty()) {
+        snap.best_bid = bids_.best().first.to_double();
+        snap.best_bid_qty = bids_.best().second;
+    }
+    if (!asks_.empty()) {
+        snap.best_ask = asks_.best().first.to_double();
+        snap.best_ask_qty = asks_.best().second;
     }
 
-    // Update cached iterators
-    update_best_bid_cache();
-    update_best_ask_cache();
+    if (!bids_.empty() && !asks_.empty()) {
+        snap.spread = snap.best_ask - snap.best_bid;
+        snap.mid_price = (snap.best_bid + snap.best_ask) / 2.0;
 
-    // Convert FixedPrice to double for display
-    snap.best_bid = best_bid_it_->first.to_double();
-    snap.best_bid_qty = best_bid_it_->second;
-    snap.best_ask = best_ask_it_->first.to_double();
-    snap.best_ask_qty = best_ask_it_->second;
-
-    snap.spread = snap.best_ask - snap.best_bid;
-    snap.mid_price = (snap.best_bid + snap.best_ask) / 2.0;
-
-    // Spread in basis points: (spread / mid) * 10000
-    if (snap.mid_price > 0.0) {
-        snap.spread_bps = (snap.spread / snap.mid_price) * 10000.0;
+        // Spread in basis points: (spread / mid) * 10000
+        if (snap.mid_price > 0.0) {
+            snap.spread_bps = (snap.spread / snap.mid_price) * 10000.0;
+        }
     }
 
     snap.imbalance = calculate_imbalance();
@@ -192,7 +105,6 @@ void OrderBook::clear() {
     bids_.clear();
     asks_.clear();
     last_update_id_ = 0;
-    invalidate_best_cache();
 }
 
 std::size_t OrderBook::bid_levels() const noexcept {
