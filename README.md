@@ -343,6 +343,23 @@ SPSC hand-off: ~225 M events/s, ~4.4 ns/handoff
 
 That is the queue hand-off on its own, not end-to-end throughput, and it depends on the CPU.
 
+`bench_ingest_replay` pushes 300 recorded binance depth messages (`benchmarks/data`, ~200 levels each) through parse, the queue and the book, same as the live feed minus the socket. Run it from the repo root:
+
+```bash
+cmake --build build --target bench_ingest_replay
+./build/bench_ingest_replay
+```
+
+Same laptop, `-O3`:
+
+```
+                          parse only      parse -> queue -> book
+nlohmann, 2 passes        ~2.7K msgs/s    ~2.3K msgs/s
+simdjson, 1 pass          ~80K msgs/s     ~51K msgs/s
+```
+
+The old code parsed the stream wrapper, dumped `data` back to a string, parsed it again and ran `std::stod` on every quantity. The live stream is only ~10 msgs/s so this is headroom, not the live rate. `benchmarks/record_feed.py` grabs a new sample.
+
 ## When something looks off
 
 - "Requesting snapshot" over and over means the depth stream has sequence gaps. That is normal for a few seconds during a burst; if it never stops, your latency to Binance is the problem.

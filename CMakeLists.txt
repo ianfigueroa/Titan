@@ -189,6 +189,10 @@ if(TITAN_BUILD_BENCHMARKS)
     add_executable(bench_spsc_throughput benchmarks/bench_spsc_throughput.cpp)
     target_link_libraries(bench_spsc_throughput PRIVATE titan_lib)
 
+    # Replay of recorded Binance messages through parse -> queue -> book
+    add_executable(bench_ingest_replay benchmarks/bench_ingest_replay.cpp)
+    target_link_libraries(bench_ingest_replay PRIVATE titan_lib)
+
     # Order Book benchmark
     add_executable(bench_order_book benchmarks/bench_order_book.cpp)
     target_link_libraries(bench_order_book PRIVATE titan_lib benchmark::benchmark)
