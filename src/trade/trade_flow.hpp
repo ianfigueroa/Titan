@@ -16,6 +16,7 @@ struct TradeFlowMetrics {
     double net_flow{0.0};  // buy - sell
     std::size_t trade_count{0};
     std::optional<TradeAlert> last_alert;
+    std::optional<TradeAlert> new_alert;
 };
 
 /// Trade flow aggregator

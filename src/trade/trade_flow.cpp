@@ -35,7 +35,9 @@ TradeFlowMetrics TradeFlow::process_trade(const binance::AggTrade& trade) {
         last_alert_ = alert;
     }
 
-    return current_metrics();
+    auto metrics = current_metrics();
+    metrics.new_alert = alert;
+    return metrics;
 }
 
 TradeFlowMetrics TradeFlow::current_metrics() const {
@@ -45,7 +47,8 @@ TradeFlowMetrics TradeFlow::current_metrics() const {
         .total_sell_volume = total_sell_volume_,
         .net_flow = total_buy_volume_ - total_sell_volume_,
         .trade_count = vwap_.trade_count(),
-        .last_alert = last_alert_
+        .last_alert = last_alert_,
+        .new_alert = std::nullopt
     };
 }
 

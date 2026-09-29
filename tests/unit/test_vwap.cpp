@@ -267,4 +267,13 @@ TEST(TradeFlowTest, LargeTradeAlert) {
 
     // Should have detected an alert (large trade >> 2 std devs above mean)
     EXPECT_TRUE(metrics.last_alert.has_value());
+    EXPECT_TRUE(metrics.new_alert.has_value());
+
+    binance::AggTrade next_trade = large_trade;
+    next_trade.agg_trade_id = 12;
+    next_trade.quantity = 1.0;
+    auto after = flow.process_trade(next_trade);
+
+    EXPECT_TRUE(after.last_alert.has_value());
+    EXPECT_FALSE(after.new_alert.has_value());
 }
